@@ -1,0 +1,62 @@
+name: CI
+
+# Lock down top-level permissions. Grant the minimum at the job level.
+permissions: {}
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group:
+    ${{ github.event_name != 'merge_group' && format('{0}-{1}', github.workflow, github.head_ref) || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read             # only need to checkout code
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Setup Compact compiler
+        uses: midnightntwrk/setup-compact-action@836895c8fffbbea6bd986af2b17e8941ff29d1f8  # v1
+        with:
+          # Pinned to 0.25.0 by two upstream constraints:
+          #  - `from` is used as a parameter name (here and in the imported
+          #    midnight-contracts NFT module); it became a reserved keyword in 0.28.0.
+          #  - this compiler emits code for compact-runtime 0.8.x, matching the
+          #    pinned `@midnight-ntwrk/compact-runtime ^0.8.1`; 0.26.0 expects 0.9.0.
+          # Bump once the runtime is upgraded and the NFT dependency drops `from`.
+          compact-version: '0.25.0'
+
+      - name: Install Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: '24'
+
+      # Provisions the yarn version declared in package.json#packageManager (yarn@1.22.22).
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Lint
+        run: yarn lint
+
+      # `build` runs the compact compile (incl. ZK key generation) and typecheck
+      # across the turbo graph before building every workspace, so this single
+      # step covers contract, api, cli, ui and the web app.
+      - name: Build
+        run: yarn build
+
+      # Pure compact-runtime simulator tests — no Docker required.
+      # The Docker/testcontainers integration test (`yarn test-api`) is deliberately
+      # excluded here; run it in a dedicated job if/when CI Docker is wired up.
+      - name: Test contract
+        run: yarn test-contract

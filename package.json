@@ -50,7 +50,7 @@
     "@typescript-eslint/parser": "^8.41.0",
     "eslint-config-prettier": "^10.1.5",
     "eslint-plugin-prettier": "^5.4.1",
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts",
+    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts#e60184ee329f5eb06b20d2eed83c1b50a5131d32",
     "pino": "^9.7.0",
     "pino-pretty": "^13.0.0",
     "rxjs": "^7.8.1",
@@ -59,6 +59,9 @@
     "typescript": "^5.8.3",
     "vitest": "^4.0.0",
     "ws": "^8.18.2"
+  },
+  "resolutions": {
+    "vite": "^7.1.4"
   },
   "devDependencies": {
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "*",

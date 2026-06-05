@@ -77,7 +77,7 @@ export ledger genderSelector: Boolean;
 export ledger buyOffers: Map<Uint<64>, Map<ZswapCoinPublicKey, Offer>>;
 
 // Witness function to retrieve a random number (for DNA generation and breeding).
-// WARNING: This is a witness, meaning the value is injected from outside the circuit 
+// WARNING: This is a witness, meaning the value is injected from outside the circuit
 // and cannot be fully trusted.
 witness createRandomNumber(): Bytes<32>;
 
@@ -177,7 +177,7 @@ export circuit transferKitty(to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
 
     // Empty the kitty offers.
     buyOffers.remove(disclose(kittyId));
-    
+
   }
 
   // Transfer the NFT using the imported NFT module.
@@ -185,7 +185,7 @@ export circuit transferKitty(to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
 }
 
 // Transfers a kitty to another account and resets its sale status.
-export circuit transferKittyFrom(from: ZswapCoinPublicKey, to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
+export circuit transferKittyFrom(fromOwner: ZswapCoinPublicKey, to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
   // const sender = ownPublicKey();
 
   // Ensure the kitty exists.
@@ -217,7 +217,7 @@ export circuit transferKittyFrom(from: ZswapCoinPublicKey, to: ZswapCoinPublicKe
   }
 
   // Transfer the NFT using the imported NFT module.
-  transferFrom(from, to, kittyId);
+  transferFrom(fromOwner, to, kittyId);
 }
 
 // Sets the price for a kitty and marks it as for sale if price > 0.
@@ -395,12 +395,12 @@ export circuit getAllKittiesCount(): Uint<64> {
 }
 
 // Helper function to get the Offer from map.
-export circuit getOffer(kittyId: Uint<64>, from: ZswapCoinPublicKey): Offer {
+export circuit getOffer(kittyId: Uint<64>, bidder: ZswapCoinPublicKey): Offer {
   if (
     buyOffers.member(disclose(kittyId)) &&
-    buyOffers.lookup(disclose(kittyId)).member(disclose(from))
+    buyOffers.lookup(disclose(kittyId)).member(disclose(bidder))
   ) {
-    return buyOffers.lookup(disclose(kittyId)).lookup(disclose(from));
+    return buyOffers.lookup(disclose(kittyId)).lookup(disclose(bidder));
   } else {
     return default<Offer>;
   }
@@ -423,4 +423,3 @@ circuit getMaxGeneration(gen1: Uint<32>, gen2: Uint<32>): Uint<32> {
     return gen2;
   }
 }
-
