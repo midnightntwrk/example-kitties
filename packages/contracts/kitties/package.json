@@ -34,6 +34,6 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts"
+    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts#e60184ee329f5eb06b20d2eed83c1b50a5131d32"
   }
 }
