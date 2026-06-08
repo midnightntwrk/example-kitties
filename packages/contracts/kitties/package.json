@@ -30,8 +30,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "eslint": "^9.28.0",
-    "typescript": "^5.8.3"
+    "eslint": "9.30.1",
+    "typescript": "5.8.3"
   },
   "dependencies": {
     "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts#e60184ee329f5eb06b20d2eed83c1b50a5131d32"

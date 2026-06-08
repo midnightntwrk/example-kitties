@@ -65,14 +65,14 @@
   },
   "devDependencies": {
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "*",
-    "eslint": "^9.28.0",
-    "http-server": "^14.1.1",
-    "prettier": "^3.2.5",
+    "eslint": "9.34.0",
+    "http-server": "14.1.1",
+    "prettier": "3.6.2",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3",
+    "typescript": "5.9.2",
     "vite": "^7.1.4",
-    "vite-plugin-wasm": "^3.4.1",
-    "vitest": "^4.0.0"
+    "vite-plugin-wasm": "3.5.0",
+    "vitest": "4.1.8"
   },
   "packageManager": "yarn@1.22.22"
 }

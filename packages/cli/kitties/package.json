@@ -11,8 +11,8 @@
     "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts"
   },
   "devDependencies": {
-    "eslint": "^9.28.0",
-    "typescript": "^5.8.3"
+    "eslint": "9.34.0",
+    "typescript": "5.9.2"
   },
   "scripts": {
     "build": "rm -rf dist && tsc --project tsconfig.build.json",
