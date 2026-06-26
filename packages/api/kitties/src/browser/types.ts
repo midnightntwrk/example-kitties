@@ -19,8 +19,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import type { DAppConnectorWalletAPI, ServiceUriConfig } from '@midnight-ntwrk/dapp-connector-api';
-import type { CoinPublicKey } from '@midnight-ntwrk/wallet-api';
+import type { WalletConnectedAPI, Configuration } from '@midnight-ntwrk/dapp-connector-api';
+import type { CoinPublicKey } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 
 export type ProviderCallbackAction =
   | 'downloadProverStarted'
@@ -35,7 +35,7 @@ export type ProviderCallbackAction =
   | 'watchForTxDataDone';
 
 export interface WalletAPI {
-  wallet: DAppConnectorWalletAPI;
+  wallet: WalletConnectedAPI;
   coinPublicKey: CoinPublicKey;
-  uris: ServiceUriConfig;
+  uris: Configuration;
 }

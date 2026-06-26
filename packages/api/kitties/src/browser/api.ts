@@ -50,19 +50,23 @@ export const createKittiesProviders = (
   walletAPI: WalletAPI,
   callback: (action: ProviderCallbackAction) => void,
 ): KittiesProviders => {
+  const zkConfigProvider = new CachedFetchZkConfigProvider<ImpureKittiesCircuits>(
+    window.location.origin,
+    fetch.bind(window),
+    callback,
+  );
+  const accountId = String(walletAPI.coinPublicKey);
   const privateStateProvider: PrivateStateProvider<'kittiesPrivateState', KittiesPrivateState> =
     levelPrivateStateProvider({
       privateStateStoreName: contractConfig.privateStateStoreName,
+      accountId,
+      privateStoragePasswordProvider: () => btoa(accountId) + '!',
     });
-  const proofProvider = proofClient(walletAPI.uris.proverServerUri);
+  const proofProvider = proofClient(walletAPI.uris.proverServerUri ?? '', zkConfigProvider);
   return {
     privateStateProvider,
     publicDataProvider,
-    zkConfigProvider: new CachedFetchZkConfigProvider<ImpureKittiesCircuits>(
-      window.location.origin,
-      fetch.bind(window),
-      callback,
-    ),
+    zkConfigProvider,
     proofProvider,
     walletProvider,
     midnightProvider,
