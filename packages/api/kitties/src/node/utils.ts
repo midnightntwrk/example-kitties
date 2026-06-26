@@ -1,4 +1,4 @@
-import { getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { parseCoinPublicKeyToHex, parseEncPublicKeyToHex } from '@midnight-ntwrk/midnight-js-utils';
 import { ShieldedAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { parseAddress } from '../common/utils.js';
@@ -32,7 +32,7 @@ export function convertWalletPublicKeyToBytes(input: unknown): Uint8Array {
   try {
     // First, try to parse as a coin public key (shield-cpk format)
     if (inputStr.includes('shield-cpk')) {
-      const hexKey = parseCoinPublicKeyToHex(inputStr, getZswapNetworkId());
+      const hexKey = parseCoinPublicKeyToHex(inputStr, getNetworkId());
       return parseAddress(hexKey);
     }
     // If it's a shield-addr format, extract the coin public key from the shielded address
@@ -43,7 +43,7 @@ export function convertWalletPublicKeyToBytes(input: unknown): Uint8Array {
       const shieldedAddress = ShieldedAddress.codec.decode(networkContext, bech32);
       // Get the coin public key string and parse it to hex
       const coinPublicKeyStr = shieldedAddress.coinPublicKeyString();
-      const hexKey = parseCoinPublicKeyToHex(coinPublicKeyStr, getZswapNetworkId());
+      const hexKey = parseCoinPublicKeyToHex(coinPublicKeyStr, getNetworkId());
       return parseAddress(hexKey);
     }
     // If it's already a hex string, parse it directly

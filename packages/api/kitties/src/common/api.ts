@@ -28,9 +28,9 @@
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   Kitties,
+  CompiledKittiesContract,
   type KittiesPrivateState,
   createKittiesPrivateState,
-  witnesses,
   type Offer,
   type Kitty,
 } from '@midnight-ntwrk/kitties-contract';
@@ -56,10 +56,6 @@ import {
   type NFTSetApprovalForAllParams,
 } from './types.js';
 
-// Single shared contract instance to ensure consistency
-const kittiesContractInstance: KittiesContract = new Kitties.Contract(witnesses);
-
-// Unified API interfaces
 export interface DeployedKittiesAPI {
   readonly deployedContractAddress: ContractAddress;
   readonly state$: Observable<KittiesState>;
@@ -114,7 +110,7 @@ export class KittiesAPI implements DeployedKittiesAPI {
   private constructor(
     public readonly deployedContract: DeployedKittiesContract,
     public readonly providers: KittiesProviders,
-    logger?: { info: (...args: any[]) => void; error: (...args: any[]) => void }
+    logger?: { info: (...args: any[]) => void; error: (...args: any[]) => void },
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
     this.state$ = this.providers.publicDataProvider
@@ -410,7 +406,7 @@ export class KittiesAPI implements DeployedKittiesAPI {
 
       console.log('Calling deployContract ...');
       const deployedContract = await deployContract(providers as any, {
-        contract: kittiesContractInstance,
+        compiledContract: CompiledKittiesContract,
         privateStateId: 'kittiesPrivateState',
         initialPrivateState: await KittiesAPI.getPrivateState('kittiesPrivateState', providers.privateStateProvider),
       });
@@ -452,7 +448,7 @@ export class KittiesAPI implements DeployedKittiesAPI {
     try {
       const deployedContract = await findDeployedContract(providers as any, {
         contractAddress,
-        contract: kittiesContractInstance,
+        compiledContract: CompiledKittiesContract,
         privateStateId: 'kittiesPrivateState',
         initialPrivateState: state,
       });
