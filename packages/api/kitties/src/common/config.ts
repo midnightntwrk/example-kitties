@@ -152,8 +152,8 @@ const logPath = (network: string): string =>
 export class StandaloneConfig implements Config {
   logDir = logPath('standalone');
   networkId = 'undeployed' as const;
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
+  indexer = 'http://127.0.0.1:8088/api/v4/graphql';
+  indexerWS = 'ws://127.0.0.1:8088/api/v4/graphql/ws';
   node = 'http://127.0.0.1:9944';
   proofServer = 'http://127.0.0.1:6300';
   constructor() {
@@ -200,8 +200,8 @@ export interface BrowserConfig {
 
 export class BrowserStandaloneConfig implements BrowserConfig {
   networkId = 'undeployed' as const;
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
+  indexer = 'http://127.0.0.1:8088/api/v4/graphql';
+  indexerWS = 'ws://127.0.0.1:8088/api/v4/graphql/ws';
   proofServer = 'http://127.0.0.1:6300';
   loggingLevel = 'info';
   constructor() {
