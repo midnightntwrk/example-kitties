@@ -22,7 +22,7 @@
     "start-preview-remote": "yarn build && yarn preview-remote",
     "standalone": "docker compose -f ../standalone.yml pull && node --experimental-specifier-resolution=node --loader ts-node/esm src/standalone.ts",
     "preprod-remote": "node --experimental-specifier-resolution=node --loader ts-node/esm src/preprod-remote.ts",
-    "preprod-remote-ps": "cp -r ../proof-server-testnet.yml ./dist/ && node --experimental-specifier-resolution=node --loader ts-node/esm src/preprod-remote-ps.ts",
+    "preprod-remote-ps": "cp -r ../proof-server.yml ./dist/ && node --experimental-specifier-resolution=node --loader ts-node/esm src/preprod-remote-ps.ts",
     "preview-remote": "node --experimental-specifier-resolution=node --loader ts-node/esm src/preview-remote.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }

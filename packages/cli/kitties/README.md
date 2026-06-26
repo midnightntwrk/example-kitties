@@ -59,7 +59,7 @@ The recommended approach is to run the proof server as a long-lived detached con
 Start the proof server from the project root:
 
 ```bash
-docker compose -f packages/cli/proof-server-testnet.yml up -d
+docker compose -f packages/cli/proof-server.yml up -d
 ```
 
 Confirm it is healthy before continuing:
@@ -71,7 +71,7 @@ curl http://localhost:6300/version
 When finished for the day, stop it:
 
 ```bash
-docker compose -f packages/cli/proof-server-testnet.yml down
+docker compose -f packages/cli/proof-server.yml down
 ```
 
 ### Running the CLI
@@ -282,7 +282,7 @@ These operations use the external NFT module functionality:
 
 ```
 === Contract Statistics ===
-Contract Address: 0x1234...5678
+Contract Address: 0200a1b2c3...d4e5f6
 Total Kitties: 42
 ```
 
@@ -308,7 +308,7 @@ The CLI provides descriptive error messages:
 "Bid price too low" - Offer below asking price
 "You don't own this kitty" - Cannot modify kitty you don't own
 "Kitty does not exist" - Invalid kitty ID
-"Invalid address format" - Address not in correct hex format
+"Invalid address format" - Address is not a valid bech32m address for the connected network
 ```
 
 ## Tips & Best Practices
@@ -339,7 +339,7 @@ The CLI provides descriptive error messages:
 
 The CLI uses Docker Compose files to run the local infrastructure it depends on. These define container images and ports only; network endpoints, proof server URLs, and wallet settings live in the API configuration (`packages/api/kitties/src/common/config.ts`).
 
-- **`proof-server-testnet.yml`** - Standalone proof server for use against preprod or preview
+- **`proof-server.yml`** - Standalone proof server for use against preprod or preview
 - **`standalone.yml`** - Full local stack (proof server, indexer, and node) for undeployed development
 
 Both files are located in `packages/cli/`.

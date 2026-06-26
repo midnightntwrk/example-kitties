@@ -25,7 +25,7 @@ import path from 'node:path';
 const config = new PreprodConfig();
 const dockerEnv = new DockerComposeEnvironment(
   path.resolve(currentDir, '..'),
-  'proof-server-testnet.yml',
+  'proof-server.yml',
 ).withWaitStrategy('proof-server', Wait.forHealthCheck());
 const logger = await createLogger(config.logDir);
 await run(config, logger, dockerEnv);
