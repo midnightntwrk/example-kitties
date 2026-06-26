@@ -34,6 +34,8 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts"
+    "@midnight-ntwrk/compact-js": "2.5.1",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf"
   }
 }

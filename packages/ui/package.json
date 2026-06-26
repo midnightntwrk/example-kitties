@@ -33,7 +33,7 @@
     "@repo/kitties-api": "*",
     "cryptokitty-generator": "git+https://riusricardo@github.com/riusricardo/kitties-generator#dev",
     "dayjs": "^1.11.13",
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts",
+    "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
