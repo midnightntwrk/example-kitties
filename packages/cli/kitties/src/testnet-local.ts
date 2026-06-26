@@ -21,8 +21,8 @@
  */
 
 import { run } from './cli.js';
-import { TestnetLocalConfig, createLogger } from '@repo/kitties-api';
+import { PreviewConfig, createLogger } from '@repo/kitties-api';
 
-const config = new TestnetLocalConfig();
+const config = new PreviewConfig();
 const logger = await createLogger(config.logDir);
 await run(config, logger);

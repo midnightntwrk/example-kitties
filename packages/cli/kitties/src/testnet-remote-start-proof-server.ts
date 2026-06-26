@@ -18,11 +18,11 @@
  */
 
 import { run } from './cli.js';
-import { currentDir, TestnetRemoteConfig, createLogger } from '@repo/kitties-api';
+import { currentDir, PreprodConfig, createLogger } from '@repo/kitties-api';
 import { DockerComposeEnvironment, Wait } from 'testcontainers';
 import path from 'node:path';
 
-const config = new TestnetRemoteConfig();
+const config = new PreprodConfig();
 const dockerEnv = new DockerComposeEnvironment(
   path.resolve(currentDir, '..'),
   'proof-server-testnet.yml',
