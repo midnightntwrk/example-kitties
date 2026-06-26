@@ -1,5 +1,5 @@
 /**
- * @file testnet-local.ts
+ * @file preview-remote.ts
  * @license GPL-3.0
  *
  * This program is free software: you can redistribute it and/or modify

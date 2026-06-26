@@ -20,6 +20,7 @@
     "start": "turbo run start --filter=@repo/web-app",
     "kitties-cli-remote": "yarn --cwd packages/cli/kitties run start-testnet-remote",
     "kitties-cli-remote-ps": "yarn --cwd packages/cli/kitties run start-testnet-remote-ps",
+    "kitties-cli-preview": "yarn --cwd packages/cli/kitties run start-preview-remote",
     "test-against-testnet": "yarn --cwd packages/cli/kitties run test-against-testnet",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",
