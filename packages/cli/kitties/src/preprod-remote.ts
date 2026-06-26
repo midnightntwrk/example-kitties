@@ -1,5 +1,5 @@
 /**
- * @file testnet-remote.ts
+ * @file preprod-remote.ts
  * @license GPL-3.0
  *
  *

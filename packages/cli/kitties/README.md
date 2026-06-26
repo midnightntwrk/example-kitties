@@ -76,16 +76,25 @@ docker compose -f packages/cli/proof-server-testnet.yml down
 
 ### Running the CLI
 
-With the proof server already running, start the interactive CLI from the project root:
+The CLI targets three networks, matching the Midnight progression of `undeployed -> preprod -> preview`. Preprod is the right default for most development. Preview receives new features first. Undeployed runs entirely against a local stack with no faucet step.
+
+For preprod or preview, start the detached proof server first (see above), then run the matching command from the project root:
 
 ```bash
-yarn kitties-cli-remote
+yarn kitties-cli-preprod
+yarn kitties-cli-preview
 ```
 
-A convenience variant starts a proof server automatically via Testcontainers and shuts it down on exit. It is slower to start and binds port 6300 for the duration of the run, so it fails if a proof server is already running. Prefer the detached workflow above; use this only for a quick one-off session:
+For undeployed, the local command starts the full standalone stack (proof server, indexer, and node) automatically, so no separate proof server is needed:
 
 ```bash
-yarn kitties-cli-remote-ps
+yarn kitties-cli-standalone
+```
+
+A preprod convenience variant starts a proof server automatically via Testcontainers and shuts it down on exit. It is slower to start and binds port 6300 for the duration of the run, so it fails if a proof server is already running. Prefer the detached workflow above; use this only for a quick one-off session:
+
+```bash
+yarn kitties-cli-preprod-ps
 ```
 
 ## Initial Setup
