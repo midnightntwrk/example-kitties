@@ -23,8 +23,6 @@
  * damages or losses arising from the use of this software.
  */
 
-import { type Resource } from '@midnight-ntwrk/wallet';
-import { type Wallet } from '@midnight-ntwrk/wallet-api';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
 import { type Logger } from 'pino';
@@ -32,6 +30,7 @@ import { type StartedDockerComposeEnvironment, type DockerComposeEnvironment } f
 import {
   type KittiesProviders,
   type Config,
+  type MidnightWalletProvider,
   StandaloneConfig,
   buildWalletAndWaitForFunds,
   buildFreshWallet,
@@ -113,7 +112,7 @@ const viewMyKitties = async (kittiesApi: KittiesAPI, providers: KittiesProviders
   try {
     logger.info('Fetching your kitties...');
     // Get the wallet's public key and convert to bytes format
-    const coinPublicKey = providers.walletProvider.coinPublicKey;
+    const coinPublicKey = providers.walletProvider.getCoinPublicKey();
     const walletBytes = convertWalletPublicKeyToBytes(coinPublicKey);
     const walletAddress = { bytes: walletBytes };
 
@@ -370,10 +369,10 @@ const mainLoop = async (providers: KittiesProviders, rli: Interface): Promise<vo
   }
 };
 
-const buildWalletFromSeed = async (config: Config, rli: Interface): Promise<(Wallet & Resource) | null> => {
+const buildWalletFromSeed = async (config: Config, rli: Interface): Promise<MidnightWalletProvider | null> => {
   try {
     const seed = await rli.question('Enter your wallet seed: ');
-    return await buildWalletAndWaitForFunds(config, seed, '');
+    return await buildWalletAndWaitForFunds(config, seed, '', logger);
   } catch (error) {
     logger.error(`Failed to build wallet from seed: ${error instanceof Error ? error.message : String(error)}`);
     return null;
@@ -387,10 +386,10 @@ You can do one of the following:
   3. Exit
 Which would you like to do? `;
 
-const buildWallet = async (config: Config, rli: Interface): Promise<(Wallet & Resource) | null> => {
+const buildWallet = async (config: Config, rli: Interface): Promise<MidnightWalletProvider | null> => {
   if (config instanceof StandaloneConfig) {
     try {
-      return await buildWalletAndWaitForFunds(config, GENESIS_MINT_WALLET_SEED, '');
+      return await buildWalletAndWaitForFunds(config, GENESIS_MINT_WALLET_SEED, '', logger);
     } catch (error) {
       logger.error(`Failed to build standalone wallet: ${error instanceof Error ? error.message : String(error)}`);
       return null;
@@ -402,7 +401,7 @@ const buildWallet = async (config: Config, rli: Interface): Promise<(Wallet & Re
     switch (choice) {
       case '1':
         try {
-          return await buildFreshWallet(config);
+          return await buildFreshWallet(config, logger);
         } catch (error) {
           logger.error(`Failed to build fresh wallet: ${error instanceof Error ? error.message : String(error)}`);
           return null;

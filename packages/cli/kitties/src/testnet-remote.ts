@@ -18,8 +18,8 @@
  */
 
 import { run } from './cli.js';
-import { TestnetRemoteConfig, createLogger } from '@repo/kitties-api';
+import { PreprodConfig, createLogger } from '@repo/kitties-api';
 
-const config = new TestnetRemoteConfig();
+const config = new PreprodConfig();
 const logger = await createLogger(config.logDir);
 await run(config, logger);
