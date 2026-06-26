@@ -24,7 +24,6 @@
  */
 
 import { CompiledContract } from "@midnight-ntwrk/compact-js";
-import ContractModule from "./managed/kitties/contract/index.js";
 import type {
   Kitty,
   Ledger,
@@ -34,7 +33,7 @@ import type {
 import * as KittiesContractModule from "./managed/kitties/contract/index.js";
 import { witnesses, type KittiesPrivateState } from "./witnesses.js";
 
-export const pureCircuits = ContractModule.pureCircuits;
+export const pureCircuits = KittiesContractModule.pureCircuits;
 export * as Kitties from "./managed/kitties/contract/index.js";
 
 /**
