@@ -33,14 +33,11 @@ src/
 
 ### Compilation
 ```bash
-# Compile the contract (skips ZK key generation for development)
+# Compile the contract and generate its ZK keys
 yarn compact
-
-# With ZK key generation (for production)
-yarn compact --zk
 ```
 
-The compiler outputs generated code to `src/managed/kitties/contract/`.
+The compiler outputs generated code to `src/managed/kitties/contract/`, along with the proving and verifier keys under `src/managed/kitties/keys` and the circuit IR under `src/managed/kitties/zkir`.
 
 ### Testing
 ```bash
@@ -200,12 +197,12 @@ yarn test-api
 ## Deployment Considerations
 
 ### Local Development
-- Uses `--skip-zk` flag for faster compilation
-- Test against local Midnight node
+- Compile with `yarn compact`, then run the contract tests against the simulator
+- Exercise the deployed contract end to end on the undeployed network (local standalone stack)
 
-### Testnet Deployment
-- Generate full ZK circuits with `yarn compact --zk`
-- Test thoroughly before mainnet
+### Shared Networks
+- Test thoroughly on preprod, the recommended shared network, before targeting preview
+- The same compiled output (contract, keys, and IR) is used across networks
 
 ## Common Issues
 

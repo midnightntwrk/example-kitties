@@ -146,12 +146,29 @@ yarn start
 ```
 
 ### 💻 CLI Operations  
-```bash
-# Interactive CLI with testnet (external proof server)
-yarn kitties-cli-remote
+The CLI runs against any of the three networks. For preprod or preview, start a detached proof server first, then run the matching command:
 
-# CLI with integrated proof server
-yarn kitties-cli-remote-ps
+```bash
+# Start a local proof server (detached)
+docker compose -f packages/cli/proof-server.yml up -d
+
+# Preprod (recommended default)
+yarn kitties-cli-preprod
+
+# Preview (newest features)
+yarn kitties-cli-preview
+```
+
+For fully local development, the undeployed command starts the standalone stack (proof server, indexer, and node) automatically:
+
+```bash
+yarn kitties-cli-standalone
+```
+
+A preprod convenience variant starts its own proof server via Testcontainers, for a quick one-off session:
+
+```bash
+yarn kitties-cli-preprod-ps
 ```
 
 **CLI Features:**
@@ -290,7 +307,7 @@ yarn test-contract
 # Run API integration tests  
 yarn test-api
 
-# Test against live testnet
+# Test against a live shared network
 yarn test-against-testnet
 ```
 

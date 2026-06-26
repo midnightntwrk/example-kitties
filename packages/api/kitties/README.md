@@ -424,7 +424,9 @@ cd packages/api/kitties
 yarn test
 ```
 
-### Test Against Testnet
+### Test Against a Live Network
+Runs the API test suite against a live shared network rather than the local simulator:
+
 ```bash
 yarn test-against-testnet
 ```
