@@ -44,7 +44,7 @@ The Kitties CLI provides an interactive command-line interface for deploying, ma
 ## Installation & Setup
 
 ### Prerequisites
-- Node.js v18+
+- Node.js v22+
 - Yarn package manager
 - Access to Midnight testnet or local node
 
@@ -52,7 +52,7 @@ The Kitties CLI provides an interactive command-line interface for deploying, ma
 
 ```bash
 # From project root
-cd midnight-kitties
+cd example-kitties
 
 # Interactive CLI with external proof server (recommended)
 yarn kitties-cli-remote

@@ -82,10 +82,10 @@ export interface WalletAPI {
 }
 
 export const getErrorType = (error: Error): MidnightWalletErrorType => {
-  if (error.message.includes('Could not find Midnight Lace wallet')) {
+  if (error.message.includes('Could not find a Midnight-compatible wallet')) {
     return MidnightWalletErrorType.WALLET_NOT_FOUND;
   }
-  if (error.message.includes('Incompatible version of Midnight Lace wallet')) {
+  if (error.message.includes('Incompatible version of Midnight-compatible wallet')) {
     return MidnightWalletErrorType.INCOMPATIBLE_API_VERSION;
   }
   if (error.message.includes('Wallet connector API has failed to respond')) {
