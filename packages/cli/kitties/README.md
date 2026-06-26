@@ -7,6 +7,7 @@ The Kitties CLI provides an interactive command-line interface for deploying, ma
 ### Getting Started
 - [Installation & Setup](#installation--setup)
   - [Prerequisites](#prerequisites)
+  - [Proof Server](#proof-server)
   - [Running the CLI](#running-the-cli)
 - [Initial Setup](#initial-setup)
   - [Deploy or Connect](#1-deploy-or-connect)
@@ -46,18 +47,44 @@ The Kitties CLI provides an interactive command-line interface for deploying, ma
 ### Prerequisites
 - Node.js v22+
 - Yarn package manager
-- Access to Midnight testnet or local node
+- Docker (to run the proof server)
+- Access to a Midnight network (preprod by default)
+
+### Proof Server
+
+Contract operations require a local proof server to generate zero-knowledge proofs. The proof server receives raw private witness data, so it runs locally on a machine you control rather than as a shared service.
+
+The recommended approach is to run the proof server as a long-lived detached container, separate from the CLI. This keeps the proof server alive across multiple CLI sessions and avoids the port conflicts that occur when each run starts and stops its own container.
+
+Start the proof server from the project root:
+
+```bash
+docker compose -f packages/cli/proof-server-testnet.yml up -d
+```
+
+Confirm it is healthy before continuing:
+
+```bash
+curl http://localhost:6300/version
+```
+
+When finished for the day, stop it:
+
+```bash
+docker compose -f packages/cli/proof-server-testnet.yml down
+```
 
 ### Running the CLI
 
+With the proof server already running, start the interactive CLI from the project root:
+
 ```bash
-# From project root
-cd example-kitties
-
-# Interactive CLI with external proof server (recommended)
 yarn kitties-cli-remote
+```
 
-# CLI with integrated proof server (slower startup)
+A convenience variant starts a proof server automatically via Testcontainers and shuts it down on exit. It is slower to start and binds port 6300 for the duration of the run, so it fails if a proof server is already running. Prefer the detached workflow above; use this only for a quick one-off session:
+
+```bash
 yarn kitties-cli-remote-ps
 ```
 
@@ -80,8 +107,8 @@ Which would you like to do?
 - Contract starts with 0 kitties
 
 **Join Existing Contract:**
-- Enter contract address in hex format
-- Connect to previously deployed contract
+- Enter the contract address in hex format
+- Connect to a previously deployed contract
 - View and interact with existing kitties
 
 ### 2. Main Menu
@@ -252,12 +279,15 @@ Total Kitties: 42
 
 ## Address Format
 
-When entering addresses, use hexadecimal format:
+Midnight wallet addresses use the bech32m format, with a network-specific prefix that identifies which network the address belongs to. A preprod unshielded address looks like this:
+
 ```
-Enter recipient address (hex): 1234567890abcdef1234567890abcdef12345678
+mn_addr_preprod1hdvtst70zfgd8wvh7l8ppp7mcrxnjn56wc5hlxpwflz3fxdykaesrw0ln4
 ```
 
-For wallet addresses, you can often use shortened or full formats as supported by your wallet.
+When a kitty operation asks for a recipient address, paste the full bech32m address as shown by your wallet. The prefix must match the network the CLI is connected to: `mn_addr_preprod1...` on preprod and `mn_addr_preview1...` on preview.
+
+Contract addresses are distinct from wallet addresses and are shown in hex. Use the value reported when a contract is deployed or when viewing contract statistics.
 
 ## Error Handling
 
@@ -294,20 +324,16 @@ The CLI provides descriptive error messages:
 ### Address Management
 - **Save contract addresses** you want to reconnect to later
 - **Keep track of wallet addresses** for transfers
-- **Use consistent format** for addresses (full hex recommended)
+- **Use the full bech32m address** for the connected network when transferring
 
 ## Configuration Files
 
-The CLI uses configuration files for different environments:
+The CLI uses Docker Compose files to run the local infrastructure it depends on. These define container images and ports only; network endpoints, proof server URLs, and wallet settings live in the API configuration (`packages/api/kitties/src/common/config.ts`).
 
-- **`proof-server-testnet.yml`** - Testnet with proof server
-- **`standalone.yml`** - Local development setup
+- **`proof-server-testnet.yml`** - Standalone proof server for use against preprod or preview
+- **`standalone.yml`** - Full local stack (proof server, indexer, and node) for undeployed development
 
-These are located in `packages/cli/kitties/` and configure:
-- Network endpoints
-- Proof server URLs
-- Wallet settings
-- Environment-specific parameters
+Both files are located in `packages/cli/`.
 
 ## Development Usage
 
