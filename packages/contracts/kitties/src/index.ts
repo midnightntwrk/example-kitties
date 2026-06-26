@@ -23,16 +23,30 @@
  * damages or losses arising from the use of this software.
  */
 
-import ContractModule from "./managed/kitties/contract/index.cjs";
+import { CompiledContract } from "@midnight-ntwrk/compact-js";
+import ContractModule from "./managed/kitties/contract/index.js";
 import type {
   Kitty,
   Ledger,
   Gender,
   Offer
-} from "./managed/kitties/contract/index.cjs";
+} from "./managed/kitties/contract/index.js";
+import * as KittiesContractModule from "./managed/kitties/contract/index.js";
+import { witnesses, type KittiesPrivateState } from "./witnesses.js";
 
 export const pureCircuits = ContractModule.pureCircuits;
-export * as Kitties from "./managed/kitties/contract/index.cjs";
+export * as Kitties from "./managed/kitties/contract/index.js";
+
+/**
+ * The compiled Kitties contract, wired with its witnesses and compiled asset
+ * location. Pass this to `deployContract` / `findDeployedContract`.
+ */
+export const CompiledKittiesContract = CompiledContract.make<
+  KittiesContractModule.Contract<KittiesPrivateState>
+>("Kitties", KittiesContractModule.Contract<KittiesPrivateState>).pipe(
+  CompiledContract.withWitnesses(witnesses),
+  CompiledContract.withCompiledFileAssets("./managed/kitties")
+);
 
 export * from "./witnesses.js";
 export type { KittiesPrivateState } from "./witnesses.js";

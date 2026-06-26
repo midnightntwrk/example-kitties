@@ -26,7 +26,7 @@
 pragma language_version >= 0.16.0;
 
 import CompactStandardLibrary;
-import "midnight-contracts/contracts/tokens/nft/src/modules/Nft";
+import "@midnight-ntwrk/example-nft-contracts/contracts/nft/src/modules/Nft";
 
 // Export selected circuits from the NFT module for standard NFT operations.
 export {
@@ -185,7 +185,8 @@ export circuit transferKitty(to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
 }
 
 // Transfers a kitty to another account and resets its sale status.
-export circuit transferKittyFrom(from: ZswapCoinPublicKey, to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
+// Note: 'from' is reserved in the Compact compiler; parameter named 'sender' to match the Nft module.
+export circuit transferKittyFrom(sender: ZswapCoinPublicKey, to: ZswapCoinPublicKey, kittyId: Uint<64>): [] {
   // const sender = ownPublicKey();
 
   // Ensure the kitty exists.
@@ -217,7 +218,7 @@ export circuit transferKittyFrom(from: ZswapCoinPublicKey, to: ZswapCoinPublicKe
   }
 
   // Transfer the NFT using the imported NFT module.
-  transferFrom(from, to, kittyId);
+  transferFrom(sender, to, kittyId);
 }
 
 // Sets the price for a kitty and marks it as for sale if price > 0.
@@ -395,12 +396,13 @@ export circuit getAllKittiesCount(): Uint<64> {
 }
 
 // Helper function to get the Offer from map.
-export circuit getOffer(kittyId: Uint<64>, from: ZswapCoinPublicKey): Offer {
+// Note: 'from' is reserved in the Compact compiler; parameter named 'sender'.
+export circuit getOffer(kittyId: Uint<64>, sender: ZswapCoinPublicKey): Offer {
   if (
     buyOffers.member(disclose(kittyId)) &&
-    buyOffers.lookup(disclose(kittyId)).member(disclose(from))
+    buyOffers.lookup(disclose(kittyId)).member(disclose(sender))
   ) {
-    return buyOffers.lookup(disclose(kittyId)).lookup(disclose(from));
+    return buyOffers.lookup(disclose(kittyId)).lookup(disclose(sender));
   } else {
     return default<Offer>;
   }

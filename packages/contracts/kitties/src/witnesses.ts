@@ -26,7 +26,7 @@
 import {
   Contract as ContractType,
   Witnesses
-} from "./managed/kitties/contract/index.cjs";
+} from "./managed/kitties/contract/index.js";
 
 import { WitnessContext } from "@midnight-ntwrk/compact-runtime";
 

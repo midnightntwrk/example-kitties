@@ -5,7 +5,7 @@ This directory contains the Compact smart contract implementation for the Crypto
 ## Contract Overview
 
 The [`kitties.compact`](src/kitties.compact) contract demonstrates:
-- Integration with external NFT modules from [`midnight-contracts`](https://github.com/riusricardo/midnight-contracts)
+- Integration with external NFT modules from [`example-nft-contracts`](https://github.com/midnightntwrk/example-nft-contracts)
 - CryptoKitties-specific breeding and marketplace functionality
 - Complex data structures and state management in Compact
 
@@ -27,9 +27,9 @@ src/
 ## Building the Contract
 
 ### Prerequisites
-- Node.js v18+
+- Node.js v22+
 - Yarn package manager
-- Compact compiler (`compactc`)
+- Compact compiler (`compact`)
 
 ### Compilation
 ```bash
@@ -58,7 +58,7 @@ yarn test --coverage
 The contract imports standard NFT functionality:
 
 ```compact
-import "midnight-contracts/contracts/tokens/nft/src/modules/Nft";
+import "@midnight-ntwrk/example-nft-contracts/contracts/nft/src/modules/Nft";
 
 // Export standard NFT operations
 export {
@@ -213,10 +213,10 @@ yarn test-api
 - Check Compact compiler version compatibility
 - Verify import paths
 - Set the `COMPACT_PATH` environment variable before compiling
-    - Ensure midnight-contracts dependency is available
+    - Ensure the @midnight-ntwrk/example-nft-contracts dependency is available
 
 ## Further Reading
 
 - [Compact Language Documentation](https://docs.midnight.network)
-- [midnight-contracts Repository](https://github.com/riusricardo/midnight-contracts)
+- [example-nft-contracts Repository](https://github.com/midnightntwrk/example-nft-contracts)
 - [Midnight Network Developer Guide](https://docs.midnight.network)
