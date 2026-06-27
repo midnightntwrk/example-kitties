@@ -22,6 +22,11 @@
 // Node.js-only wallet wiring for the CLI. Builds a WalletFacade (shielded +
 // unshielded + dust sub-wallets) and exposes it as a midnight-js provider.
 
+// Ensure globalThis.crypto exists before any crypto-dependent code runs. Some
+// Node runtimes (notably the ts-node ESM loader used by the CLI) do not expose
+// it as a global. This side-effect import must come first.
+import './crypto-polyfill.js';
+
 import {
   HDWallet,
   Roles,
@@ -33,6 +38,7 @@ import {
   createKeystore,
   PublicKey,
   NoOpTransactionHistoryStorage,
+  type FacadeState,
   type UnshieldedKeystore,
 } from '@midnightntwrk/wallet-sdk';
 import * as ledger from '@midnight-ntwrk/midnight-js-protocol/ledger';
@@ -44,11 +50,22 @@ import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { Buffer } from 'buffer';
+import * as Rx from 'rxjs';
 import type { Logger } from 'pino';
 
 import { type Config, contractConfig, StandaloneConfig, PreprodConfig, PreviewConfig } from '../common/config.js';
 import { KittiesPrivateStateId, type KittiesProviders, type DeployedKittiesContract } from '../common/types.js';
 import { randomBytes } from '../common/utils.js';
+
+/**
+ * A sub-wallet's progress object is "strictly complete" once it has caught up to
+ * the chain tip. The facade exposes a combined `FacadeState.isSynced` for the
+ * all-three case (used as the sync gate below); this per-progress helper is for
+ * the spots that need a single sub-wallet's status: the progress log and the
+ * NIGHT wait, which only depends on the unshielded sub-wallet.
+ */
+const isProgressStrictlyComplete = (progress: { isStrictlyComplete(): boolean }): boolean =>
+  progress.isStrictlyComplete();
 
 /** Sum the value of a set of unshielded UTxOs (the wallet's NIGHT coins). */
 const nightFromUtxos = (coins: ReadonlyArray<{ utxo: { value: bigint } }>): bigint =>
@@ -100,17 +117,24 @@ const buildWalletFacade = async (config: Config, seed: string) => {
   };
   const dustConfig = {
     ...shieldedConfig,
+    // Matches the canonical testkit-js DEFAULT_DUST_OPTIONS exactly. The two
+    // load-bearing values are additionalFeeOverhead (0n: any positive overhead
+    // makes the balancer demand more DUST than has generated, failing with
+    // "could not balance dust") and ledgerParams (required for the balancer's
+    // fee math; omitting it yields a wrong fee).
     costParameters: {
-      additionalFeeOverhead: config.networkId === 'undeployed' ? 500_000_000_000_000_000n : 300_000_000_000_000n,
+      ledgerParams: ledger.LedgerParameters.initialParameters(),
+      additionalFeeOverhead: 0n,
       feeBlocksMargin: 5,
     },
   };
 
+  const dustParameters = ledger.LedgerParameters.initialParameters().dust;
   const wallet = await WalletFacade.init({
     configuration: { ...shieldedConfig, ...unshieldedConfig, ...dustConfig },
     shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
     unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
-    dust: (cfg) => DustWallet(cfg).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
+    dust: (cfg) => DustWallet(cfg).startWithSecretKey(dustSecretKey, dustParameters),
   });
   await wallet.start(shieldedSecretKeys, dustSecretKey);
 
@@ -161,68 +185,170 @@ export class MidnightWalletProvider implements WalletProvider, MidnightProvider 
    * NIGHT, and (on non-undeployed networks) register NIGHT for DUST generation
    * so transaction fees can be paid.
    */
-  static async build(logger: Logger, config: Config, seed: string): Promise<MidnightWalletProvider> {
+  static async build(
+    logger: Logger,
+    config: Config,
+    seed: string,
+    showSeed = false,
+  ): Promise<MidnightWalletProvider> {
     const { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore } = await buildWalletFacade(config, seed);
-    const provider = new MidnightWalletProvider(logger, wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore);
+    const provider = new MidnightWalletProvider(
+      logger,
+      wallet,
+      shieldedSecretKeys,
+      dustSecretKey,
+      unshieldedKeystore,
+    );
 
-    logger.info(`Wallet seed: ${seed}`);
+    // Only surface the seed at the moment a wallet is created, so the user can
+    // record it. Never display it on restore-from-seed or on subsequent runs:
+    // a seed is sensitive and re-displaying it is an exposure risk.
+    if (showSeed) {
+      logger.info(`New wallet seed (write this down, it will not be shown again): ${seed}`);
+    }
+    // Print the unshielded address up front so it can be funded from the faucet
+    // while the wallet syncs. The faucet sends tNIGHT to the unshielded address.
+    logger.info(`Unshielded address (fund this from the faucet): ${unshieldedKeystore.getBech32Address()}`);
+    if (config.faucetUrl) {
+      logger.info(`Faucet: ${config.faucetUrl}`);
+    }
     logger.info('Waiting for wallet to sync...');
-    const state = await wallet.waitForSyncedState();
-    logger.info(`Shielded address: ${state.shielded.address.coinPublicKeyString()}`);
+    let state = await provider.waitForFullSync();
 
     const nightBalance = nightFromUtxos(state.unshielded.availableCoins);
     if (nightBalance <= 0n) {
-      if (config.faucetUrl) {
-        logger.info(`No NIGHT yet. Fund this wallet's unshielded address from the faucet: ${config.faucetUrl}`);
-      }
-      logger.info('Waiting to receive NIGHT...');
+      logger.info('No NIGHT yet. Waiting to receive NIGHT at the unshielded address above...');
       await provider.waitForNight();
+      state = await provider.waitForFullSync();
     }
     logger.info('NIGHT received.');
 
-    // Undeployed/standalone is genesis-funded and does not require DUST registration.
-    if (config.networkId !== 'undeployed') {
-      await provider.ensureDustRegistered();
-    }
+    // Register NIGHT for DUST generation if the wallet has no DUST yet, then
+    // re-sync. DUST then accrues from the registered NIGHT over block-time and
+    // the balancer draws on it at transaction time. Mirrors the canonical
+    // testkit waitForFunds: register-if-zero, re-sync, no spendable-dust wait.
+    await provider.ensureDustRegistered(state);
 
     return provider;
   }
 
+  /**
+   * Resolves with the first wallet state that is fully synced, gating on the
+   * facade's own `FacadeState.isSynced` (all three sub-wallets strictly complete).
+   * Reading balances or UTxOs before this can yield a partial view.
+   */
+  private async waitForFullSync(): Promise<FacadeState> {
+    // No timeout: sync time depends on the network and chain depth and is not
+    // predictable, so the wallet waits until all three sub-wallets reach the
+    // chain tip rather than failing after an arbitrary deadline. Mirrors the
+    // reference example-bboard sync helpers, which impose no timeout. The
+    // throttled progress log keeps the wait visible.
+    return Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(5_000),
+        Rx.tap((s: FacadeState) =>
+          this.logger.info(
+            `Syncing: shielded=${isProgressStrictlyComplete(s.shielded.state.progress)} ` +
+              `unshielded=${isProgressStrictlyComplete(s.unshielded.progress)} ` +
+              `dust=${isProgressStrictlyComplete(s.dust.state.progress)}`,
+          ),
+        ),
+        Rx.filter((s: FacadeState) => s.isSynced),
+      ),
+    );
+  }
+
   /** Resolves once the unshielded wallet holds a positive NIGHT balance. */
   private async waitForNight(): Promise<bigint> {
-    for (;;) {
-      const state = await this.wallet.waitForSyncedState();
-      const balance = nightFromUtxos(state.unshielded.availableCoins);
-      if (balance > 0n) {
-        return balance;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 5_000));
-    }
+    // No timeout: the user funds the unshielded address from the faucet, which
+    // can take an unpredictable amount of time. Wait until NIGHT arrives rather
+    // than failing after an arbitrary deadline. Mirrors example-bboard's
+    // waitForUnshieldedFunds, which has no timeout.
+    return Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(10_000),
+        Rx.filter((s: FacadeState) => isProgressStrictlyComplete(s.unshielded.progress)),
+        Rx.map((s: FacadeState) => nightFromUtxos(s.unshielded.availableCoins)),
+        Rx.filter((balance) => balance > 0n),
+      ),
+    );
   }
 
   /**
-   * Register the wallet's NIGHT UTxOs for DUST generation so fees can be paid.
-   * No-op on undeployed (genesis-funded). Skips UTxOs already registered.
+   * Ensure the wallet can pay fees: register NIGHT UTxOs for DUST generation if
+   * none are registered yet, then wait for DUST to actually generate.
+   *
+   * On a freshly booted standalone node, genesis NIGHT may already be registered
+   * for DUST generation, so `dust.balance(new Date())` reads non-zero from
+   * projection even though almost no DUST has *generated* yet (little block-time
+   * has elapsed). The balancer draws on generated DUST, so deploying immediately
+   * fails with "could not balance dust". Mirrors the official
+   * generating-dust-programmatically guide: register only the unregistered NIGHT
+   * UTxOs (if any), then always wait until the wallet is synced AND
+   * `dust.balance(new Date()) > 0n`, which only becomes true once the node has
+   * sealed enough blocks to generate spendable DUST (typically 1-2 minutes).
    */
-  private async ensureDustRegistered(): Promise<void> {
-    const state = await this.wallet.waitForSyncedState();
-    const nightUtxos = state.unshielded.availableCoins.filter((c) => !c.meta.registeredForDustGeneration);
-    if (nightUtxos.length === 0) {
-      // Either already registered or no NIGHT to register.
-      return;
-    }
-    this.logger.info('Registering NIGHT for DUST generation (needed to pay fees)...');
-    const { fee } = await this.wallet.estimateRegistration(nightUtxos);
-    await this.wallet.waitForGeneratedDust(nightUtxos, fee);
-    const recipe = await this.wallet.registerNightUtxosForDustGeneration(
-      nightUtxos,
-      this.unshieldedKeystore.getPublicKey(),
-      (payload) => this.unshieldedKeystore.signData(payload),
+  private async ensureDustRegistered(syncedState: FacadeState): Promise<void> {
+    const nightRaw = ledger.unshieldedToken().raw;
+    const unregistered = syncedState.unshielded.availableCoins.filter(
+      (coin) => coin.utxo.type === nightRaw && coin.meta.registeredForDustGeneration === false,
     );
-    const signed = await this.wallet.signRecipe(recipe, (payload) => this.unshieldedKeystore.signData(payload));
-    const finalized = await this.wallet.finalizeRecipe(signed);
-    await this.wallet.submitTransaction(finalized);
-    this.logger.info('DUST registration submitted.');
+
+    if (unregistered.length > 0) {
+      this.logger.info(`Registering ${unregistered.length} NIGHT UTxO(s) for DUST generation...`);
+      const recipe = await this.wallet.registerNightUtxosForDustGeneration(
+        unregistered,
+        this.unshieldedKeystore.getPublicKey(),
+        (payload) => this.unshieldedKeystore.signData(payload),
+      );
+      const finalized = await this.wallet.finalizeRecipe(recipe);
+      const txId = await this.wallet.submitTransaction(finalized);
+      this.logger.info(`DUST registration submitted: ${txId}`);
+    } else {
+      this.logger.info('NIGHT already registered for DUST generation.');
+    }
+
+    await this.waitForGeneratedDust();
+  }
+
+  /**
+   * Resolve once the wallet is fully synced and holds a positive generated DUST
+   * balance. On a cold standalone node this gates on block-time: DUST generates
+   * from registered NIGHT as the node seals blocks, so this can take 1-2 minutes
+   * on first run. Mirrors the official generating-dust-programmatically guide's
+   * post-registration wait (`isSynced && dust.balance(now) > 0n`).
+   */
+  private async waitForGeneratedDust(timeoutMs = 300_000): Promise<void> {
+    this.logger.info('Waiting for DUST to generate (this may take 1-2 minutes on a fresh node)...');
+    // On a cold standalone node the wall-clock projection `dust.balance(now)`
+    // can read non-zero before the chain has actually generated spendable DUST
+    // at its latest block (the balancer draws on generated, not projected,
+    // DUST). Gating on the balance alone can therefore pass instantly and the
+    // deploy still fails. To guarantee real block-time elapses, require the
+    // generated DUST balance to be observed positive across a settle window so
+    // the node has sealed enough blocks for the balancer to draw on it.
+    const settleMs = 30_000;
+    let firstPositiveAt: number | undefined;
+    await Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(5_000),
+        Rx.tap((s: FacadeState) => this.logger.info(`DUST balance: ${s.dust.balance(new Date())}`)),
+        Rx.filter((s: FacadeState) => s.isSynced && s.dust.balance(new Date()) > 0n),
+        Rx.filter(() => {
+          const now = Date.now();
+          if (firstPositiveAt === undefined) {
+            firstPositiveAt = now;
+            return false;
+          }
+          return now - firstPositiveAt >= settleMs;
+        }),
+        Rx.timeout({
+          each: timeoutMs,
+          with: () => Rx.throwError(() => new Error(`DUST did not generate within ${timeoutMs}ms`)),
+        }),
+      ),
+    );
+    this.logger.info('DUST ready.');
   }
 }
 
@@ -257,7 +383,7 @@ export const buildWalletAndWaitForFunds = async (
 ): Promise<MidnightWalletProvider> => MidnightWalletProvider.build(logger, config, seed);
 
 export const buildFreshWallet = async (config: Config, logger: Logger): Promise<MidnightWalletProvider> =>
-  MidnightWalletProvider.build(logger, config, toHex(randomBytes(32)));
+  MidnightWalletProvider.build(logger, config, toHex(randomBytes(32)), true);
 
 /** Generate a fresh random wallet seed as a hex string. */
 export const newWalletSeed = (): string => toHex(Buffer.from(generateRandomSeed()));
