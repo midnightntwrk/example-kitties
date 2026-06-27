@@ -204,7 +204,9 @@ const setKittyPrice = async (kittiesApi: KittiesAPI, rli: Interface): Promise<vo
     const kittyIdStr = await rli.question('Enter the kitty ID to set price for: ');
     const kittyId = safeParseBigInt(kittyIdStr);
 
-    const priceStr = await rli.question('Enter the price (0 to remove from sale): ');
+    const priceStr = await rli.question(
+      'Enter the price as a whole number, 0 to remove from sale (a value recorded on the contract; no tokens are transferred): ',
+    );
     const price = safeParseBigInt(priceStr);
 
     logger.info(`Setting price for kitty #${kittyId} to ${formatPrice(price)}...`);
@@ -220,7 +222,9 @@ const createBuyOffer = async (kittiesApi: KittiesAPI, rli: Interface): Promise<v
     const kittyIdStr = await rli.question('Enter the kitty ID to create offer for: ');
     const kittyId = safeParseBigInt(kittyIdStr);
 
-    const bidPriceStr = await rli.question('Enter your bid price: ');
+    const bidPriceStr = await rli.question(
+      'Enter your bid price as a whole number (a value recorded on the contract; no tokens are transferred): ',
+    );
     const bidPrice = safeParseBigInt(bidPriceStr);
 
     logger.info(`Creating buy offer for kitty #${kittyId} with bid price ${formatPrice(bidPrice)}...`);

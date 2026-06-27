@@ -185,9 +185,20 @@ export class KittiesAPI implements DeployedKittiesAPI {
 
   async getOffer(params: GetOfferParams): Promise<Offer> {
     this.logger.info(`Getting offer for kitty ${params.kittyId} from ${toHex(params.from.bytes)}...`);
-    const response = await this.deployedContract.callTx.getOffer(params.kittyId, params.from);
-    const offer = (response as any).private.result;
-    return offer;
+    // Read-only: offers live in public ledger state (buyOffers), so query
+    // directly instead of submitting a circuit transaction.
+    const contractState = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!contractState) {
+      throw new Error(`Contract state not found at ${this.deployedContractAddress}`);
+    }
+    const ledgerState = Kitties.ledger(contractState.data);
+    if (ledgerState.buyOffers.member(params.kittyId)) {
+      const kittyOffers = ledgerState.buyOffers.lookup(params.kittyId);
+      if (kittyOffers.member(params.from)) {
+        return kittyOffers.lookup(params.from);
+      }
+    }
+    throw new Error(`No offer found for kitty ${params.kittyId} from the given address`);
   }
 
   async getOffersForKitty(kittyId: bigint): Promise<Offer[]> {
@@ -221,10 +232,17 @@ export class KittiesAPI implements DeployedKittiesAPI {
 
   async getKitty(kittyId: bigint): Promise<KittyData> {
     this.logger.info(`Getting kitty ${kittyId}...`);
-    // Use the contract call directly for read operations
-    const response = await this.deployedContract.callTx.getKitty(kittyId);
-    // Extract the result from the transaction response
-    const kitty = (response as any).private.result;
+    // Read-only: query public ledger state directly instead of submitting a
+    // circuit transaction. Reads need no proof, fee, or TTL.
+    const contractState = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!contractState) {
+      throw new Error(`Contract state not found at ${this.deployedContractAddress}`);
+    }
+    const ledgerState = Kitties.ledger(contractState.data);
+    if (!ledgerState.kitties.member(kittyId)) {
+      throw new Error(`Kitty ${kittyId} does not exist`);
+    }
+    const kitty = ledgerState.kitties.lookup(kittyId);
     return {
       id: kittyId,
       dna: kitty.dna,
@@ -238,9 +256,13 @@ export class KittiesAPI implements DeployedKittiesAPI {
 
   async getAllKittiesCount(): Promise<bigint> {
     this.logger.info('Getting total kitties count...');
-    // Use the contract call directly for read operations
-    const response = await this.deployedContract.callTx.getAllKittiesCount();
-    const count = (response as any).private.result;
+    // Read-only: the count lives in public ledger state, so query it directly
+    // instead of submitting a circuit transaction.
+    const contractState = await this.providers.publicDataProvider.queryContractState(this.deployedContractAddress);
+    if (!contractState) {
+      throw new Error(`Contract state not found at ${this.deployedContractAddress}`);
+    }
+    const count = Kitties.ledger(contractState.data).allKittiesCount;
     this.logger.info(`Total kitties: ${count}`);
     return count;
   }
@@ -408,7 +430,11 @@ export class KittiesAPI implements DeployedKittiesAPI {
       const deployedContract = await deployContract(providers as any, {
         compiledContract: CompiledKittiesContract,
         privateStateId: 'kittiesPrivateState',
-        initialPrivateState: await KittiesAPI.getPrivateState('kittiesPrivateState', providers.privateStateProvider),
+        // In midnight-js v4, deployContract sets the contract address and persists
+        // the scoped private state itself. Pass a freshly-created initial state
+        // rather than reading from the provider first (a pre-deploy read throws
+        // "Contract address not set" because no scope exists yet).
+        initialPrivateState: createKittiesPrivateState(),
       });
 
       console.log(`Deployed contract at address: ${deployedContract.deployTxData.public.contractAddress}`);
@@ -444,13 +470,15 @@ export class KittiesAPI implements DeployedKittiesAPI {
    */
   static async connect(providers: KittiesProviders, contractAddress: ContractAddress | string): Promise<KittiesAPI> {
     console.log(`Connecting to kitties contract at ${contractAddress}...`);
-    const state = await this.getOrCreateInitialPrivateState(providers.privateStateProvider);
     try {
       const deployedContract = await findDeployedContract(providers as any, {
         contractAddress,
         compiledContract: CompiledKittiesContract,
         privateStateId: 'kittiesPrivateState',
-        initialPrivateState: state,
+        // findDeployedContract scopes private state to the contract address itself
+        // in midnight-js v4. Pass a freshly-created initial state; reading from the
+        // provider first throws "Contract address not set".
+        initialPrivateState: createKittiesPrivateState(),
       });
 
       console.log('Successfully connected to contract');

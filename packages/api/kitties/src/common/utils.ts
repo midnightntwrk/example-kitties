@@ -28,7 +28,15 @@ import type { Gender } from '@midnight-ntwrk/kitties-contract';
  */
 export function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
+  // Use the Web Crypto global. Present in all browsers and in Node (the CLI
+  // entry points install it from node:crypto when the runtime does not expose
+  // it as a global). Referenced via globalThis so a bare `crypto` identifier is
+  // never required, which the ESM loader would not resolve.
+  const webcrypto = (globalThis as { crypto?: Crypto }).crypto;
+  if (!webcrypto || typeof webcrypto.getRandomValues !== 'function') {
+    throw new Error('No Web Crypto implementation available to generate random bytes');
+  }
+  webcrypto.getRandomValues(bytes);
   return bytes;
 }
 
