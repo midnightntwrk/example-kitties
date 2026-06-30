@@ -117,14 +117,21 @@ const buildWalletFacade = async (config: Config, seed: string) => {
   };
   const dustConfig = {
     ...shieldedConfig,
-    // Matches the canonical testkit-js DEFAULT_DUST_OPTIONS exactly. The two
-    // load-bearing values are additionalFeeOverhead (0n: any positive overhead
-    // makes the balancer demand more DUST than has generated, failing with
-    // "could not balance dust") and ledgerParams (required for the balancer's
-    // fee math; omitting it yields a wrong fee).
+    // Fee parameters for the DUST balancer.
+    //
+    // additionalFeeOverhead MUST be positive. On an idle network the per-block
+    // fee rate can be ~0, so a fee computed from feeBlocksMargin alone rounds to
+    // zero; the balancer then builds an empty DustActions and the node rejects
+    // the transaction as NotNormalized (Invalid Transaction: Custom error 117).
+    // A small fixed overhead (1_000_000n Specks) forces a non-zero fee so the
+    // transaction normalizes and is accepted. Verified: 0n -> first contract
+    // call rejected with 117; 1_000_000n -> deploy and call both succeed.
+    //
+    // ledgerParams is required for the balancer's fee math; omitting it yields a
+    // wrong fee.
     costParameters: {
       ledgerParams: ledger.LedgerParameters.initialParameters(),
-      additionalFeeOverhead: 0n,
+      additionalFeeOverhead: 1_000_000n,
       feeBlocksMargin: 5,
     },
   };
