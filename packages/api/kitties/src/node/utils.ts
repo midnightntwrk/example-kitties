@@ -1,5 +1,5 @@
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { parseCoinPublicKeyToHex, parseEncPublicKeyToHex } from '@midnight-ntwrk/midnight-js-utils';
+import { parseCoinPublicKeyToHex } from '@midnight-ntwrk/midnight-js-utils';
 import { ShieldedAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { parseAddress } from '../common/utils.js';
 /**
@@ -11,12 +11,7 @@ export function safeParseAddressWithWallet(input: string): Uint8Array {
   if (!input || typeof input !== 'string') {
     throw new Error('Input must be a non-empty string');
   }
-  try {
-    const result = convertWalletPublicKeyToBytes(input);
-    return result;
-  } catch (error) {
-    throw new Error(`Invalid address format: ${input}. Please enter a valid address.`);
-  }
+  return convertWalletPublicKeyToBytes(input);
 }
 
 // Helper function to convert wallet public key to bytes format
@@ -46,14 +41,24 @@ export function convertWalletPublicKeyToBytes(input: unknown): Uint8Array {
       const hexKey = parseCoinPublicKeyToHex(coinPublicKeyStr, getNetworkId());
       return parseAddress(hexKey);
     }
-    // If it's already a hex string, parse it directly
-    else {
+    // If it's already a bare hex coin public key, accept exactly 32 bytes
+    // (64 hex chars). The contract identifies owners by ZswapCoinPublicKey, so
+    // a recipient must resolve to a 32-byte shielded coin public key.
+    else if (/^[0-9a-fA-F]{64}$/.test(inputStr)) {
       return parseAddress(inputStr);
     }
+    // Anything else is not a valid recipient. In particular the unshielded
+    // address (mn_addr_...) is for receiving tNIGHT from the faucet, not for
+    // kitty ownership, so reject it with a clear message rather than silently
+    // mis-decoding it as hex.
+    else {
+      throw new Error('unrecognized recipient format');
+    }
   } catch (error) {
-    console.error('Failed to parse address:', error);
     throw new Error(
-      `Unable to parse address: ${input}. Please provide either a shield-cpk (coin public key), shield-addr (wallet address), or hex format.`,
+      `Unable to parse recipient "${input}". A recipient must be a shielded coin public key: ` +
+        'a shield-addr (mn_shield-addr_...) address, a shield-cpk coin public key, or a 64-character hex coin public key. ' +
+        'The unshielded mn_addr_... address is for receiving tNIGHT and cannot own a kitty.',
     );
   }
 }
