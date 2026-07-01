@@ -23,7 +23,7 @@
  * damages or losses arising from the use of this software.
  */
 
-pragma language_version >= 0.16.0;
+pragma language_version >= 0.23;
 
 import CompactStandardLibrary;
 import "@midnight-ntwrk/example-nft-contracts/contracts/nft/src/modules/Nft";
