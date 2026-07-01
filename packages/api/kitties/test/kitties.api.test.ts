@@ -23,10 +23,8 @@
  * damages or losses arising from the use of this software.
  */
 
-import { type Resource } from '@midnight-ntwrk/wallet';
-import { type Wallet } from '@midnight-ntwrk/wallet-api';
 import path from 'path';
-import { configureProviders, KittiesProviders } from '@repo/kitties-api/node-api';
+import { configureProviders, type KittiesProviders, type MidnightWalletProvider } from '@repo/kitties-api/node-api';
 import { setLogger, KittiesAPI, currentDir } from '@repo/kitties-api';
 import { TestEnvironment } from './commons';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -38,12 +36,13 @@ const logger = await createLogger(logDir);
 
 describe('API', () => {
   let testEnvironment: TestEnvironment;
-  let wallet: Wallet & Resource;
+  let walletProvider: MidnightWalletProvider;
   let providers: KittiesProviders;
 
-  // Helper method to get the current wallet address in the correct Hex Bytes format
+  // Helper method to get the current wallet address in the correct Hex Bytes format.
+  // Mirrors the CLI: read the wallet's coin public key and convert it to contract bytes.
   function getWalletAddress(): { bytes: Uint8Array } {
-    const coinPublicKey = this.providers.walletProvider.coinPublicKey;
+    const coinPublicKey = providers.walletProvider.getCoinPublicKey();
     const bytes = convertWalletPublicKeyToBytes(coinPublicKey);
     return { bytes };
   }
@@ -53,25 +52,21 @@ describe('API', () => {
       setLogger(logger);
       testEnvironment = new TestEnvironment(logger);
       const testConfiguration = await testEnvironment.start();
-      wallet = await testEnvironment.getWallet();
+      walletProvider = await testEnvironment.getWalletProvider();
       providers = await configureProviders(
-        wallet,
+        walletProvider,
         testConfiguration.dappConfig,
-        new NodeZkConfigProvider<'increment'>(contractConfig.zkConfigPath),
+        new NodeZkConfigProvider(contractConfig.zkConfigPath),
       );
     },
     1000 * 60 * 45,
   );
 
   afterAll(async () => {
-    await testEnvironment.saveWalletCache();
     await testEnvironment.shutdown();
   });
 
   it('should deploy the contract and create kitties [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy using new unified API - now returns KittiesAPI instance
     const kittiesApi = await KittiesAPI.deploy(providers, {});
     expect(kittiesApi).not.toBeNull();
@@ -99,9 +94,6 @@ describe('API', () => {
   });
 
   it('should create multiple kitties and track ownership [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
     expect(kittiesApi).not.toBeNull();
@@ -123,7 +115,7 @@ describe('API', () => {
     expect(userKittiesAfterFirst[0].generation).toEqual(BigInt(0));
 
     // Test the convenience method getMyKitties
-    const myKittiesAfterFirst = await kittiesApi.getMyKitties();
+    const myKittiesAfterFirst = await kittiesApi.getMyKitties(walletBytes);
     expect(myKittiesAfterFirst.length).toBe(1);
     expect(myKittiesAfterFirst[0].id).toEqual(BigInt(1));
 
@@ -143,9 +135,6 @@ describe('API', () => {
   });
 
   it('should handle kitty pricing and sales lists [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
@@ -186,9 +175,6 @@ describe('API', () => {
   });
 
   it('should handle kitty breeding [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
@@ -218,9 +204,6 @@ describe('API', () => {
   });
 
   it('should enforce offer-based buying system constraints [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
@@ -265,9 +248,6 @@ describe('API', () => {
   });
 
   it('should handle NFT standard operations [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
@@ -322,9 +302,6 @@ describe('API', () => {
   });
 
   it('should handle NFT approval system operations [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
@@ -376,9 +353,6 @@ describe('API', () => {
   });
 
   it('should handle error conditions and edge cases [@slow]', async () => {
-    // Clear any existing private state to ensure clean test
-    await providers.privateStateProvider.clear();
-
     // Deploy a new contract for this test
     const kittiesApi = await KittiesAPI.deploy(providers, {});
 
