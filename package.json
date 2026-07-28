@@ -64,7 +64,7 @@
     "vite": "^7.1.4"
   },
   "devDependencies": {
-    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "*",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "2.0.2",
     "eslint": "^9.28.0",
     "http-server": "^14.1.1",
     "prettier": "^3.2.5",
