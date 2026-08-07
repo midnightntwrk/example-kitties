@@ -19,6 +19,7 @@
 - [Technical Architecture](#technical-architecture)
 - [Project Structure & Components](#project-structure--components)
 - [Getting Started](#-getting-started)
+- [Networks](#networks)
 - [Compact Language & Smart Contract](#compact-language--smart-contract)
 - [NFT Module Integration](#nft-module-integration)
 - [Development & Testing](#-development--testing)
@@ -43,7 +44,7 @@ The application implements a CryptoKitties-inspired NFT system with breeding mec
 ### Key Features
 
 - **Compact Language Learning** - A practical example of building with Midnight's Compact programming language
-- **NFT Module Integration** - Uses external NFT modules from the midnight-contracts repository
+- **NFT Module Integration** - Uses external NFT modules from the [`example-nft-contracts`](https://github.com/midnightntwrk/example-nft-contracts) repository
 - **Complete NFT System** - Includes breeding, trading, and ownership mechanics
 - **Full-Stack Application** - Web UI, CLI tools, APIs, and testing framework
 - **Genetic Breeding System** - Basic breeding mechanics with DNA inheritance and generation tracking
@@ -89,7 +90,7 @@ This project shows how different components work together in the Midnight ecosys
 ### Core Applications
 - **`apps/web/`** - React web application featuring:
   - Interactive kitty gallery and breeding interface
-  - Midnight Lace wallet integration
+  - A Midnight-compatible wallet integration
   - Real-time contract state synchronization
   - Responsive Material-UI design
 
@@ -122,15 +123,15 @@ This project shows how different components work together in the Midnight ecosys
 ## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js** v18 or higher
+- **Node.js** v22 or higher
 - **Yarn** package manager
-- **Midnight Lace Wallet** (for web interface)
+- **A Midnight-compatible wallet** (for web interface)
 
 ### Quick Installation
 ```bash
 # Clone and install dependencies
-git clone https://github.com/riusricardo/midnight-kitties.git
-cd midnight-kitties
+git clone https://github.com/midnightntwrk/example-kitties.git
+cd example-kitties
 yarn install
 
 # Build all packages
@@ -145,12 +146,29 @@ yarn start
 ```
 
 ### 💻 CLI Operations  
-```bash
-# Interactive CLI with testnet (external proof server)
-yarn kitties-cli-remote
+The CLI runs against any of the three networks. For preprod or preview, start a detached proof server first, then run the matching command:
 
-# CLI with integrated proof server
-yarn kitties-cli-remote-ps
+```bash
+# Start a local proof server (detached)
+docker compose -f packages/cli/proof-server.yml up -d
+
+# Preprod (recommended default)
+yarn kitties-cli-preprod
+
+# Preview (newest features)
+yarn kitties-cli-preview
+```
+
+For fully local development, the undeployed command starts the standalone stack (proof server, indexer, and node) automatically:
+
+```bash
+yarn kitties-cli-standalone
+```
+
+A preprod convenience variant starts its own proof server via Testcontainers, for a quick one-off session:
+
+```bash
+yarn kitties-cli-preprod-ps
 ```
 
 **CLI Features:**
@@ -162,6 +180,16 @@ yarn kitties-cli-remote-ps
 - 🧐​ Query kitty details and ownership
 - 🖼️ Direct access to selected NFT module circuits 
 
+## Networks
+
+Midnight has several networks. Mainnet is not yet available.
+
+- **undeployed** - Fully local. Runs against a standalone node and proof server with no external network. Best for contract development and tests.
+- **preprod** - Stable shared testnet. The right default for most app development. Faucet: https://midnight-tmnight-preprod.nethermind.dev/
+- **preview** - Receives new features first, ahead of preprod. Use it to try upcoming functionality. Faucet: https://midnight-tmnight-preview.nethermind.dev/
+
+Fund a wallet address from the matching faucet before deploying or transacting on that network. Any Midnight-compatible wallet that supports the target network can be used with the web app.
+
 ## Compact Language & Smart Contract
 
 This project is a practical exploration of the **Compact programming language**. The smart contract demonstrates how to build NFT functionality while integrating external modules.
@@ -170,7 +198,7 @@ This project is a practical exploration of the **Compact programming language**.
 
 ### Smart Contract Architecture
 
-This project demonstrates how to work with external NFT modules from the [`midnight-contracts`](https://github.com/riusricardo/midnight-contracts) repository:
+This project demonstrates how to work with external NFT modules from the [`example-nft-contracts`](https://github.com/midnightntwrk/example-nft-contracts) repository:
 
 ### What This Approach Provides:
 - **Time Saving** - No need to implement standard NFT functionality from scratch
@@ -183,7 +211,7 @@ The external NFT module handles all the standard ERC-721 operations (balanceOf, 
 
 **1. External NFT Module Import**
 ```compact
-import "midnight-contracts/contracts/tokens/nft/src/modules/Nft";
+import "@midnight-ntwrk/example-nft-contracts/contracts/nft/src/modules/Nft";
 
 // Export standard NFT operations directly from the module
 export {
@@ -279,7 +307,7 @@ yarn test-contract
 # Run API integration tests  
 yarn test-api
 
-# Test against live testnet
+# Test against a live shared network
 yarn test-against-testnet
 ```
 

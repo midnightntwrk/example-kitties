@@ -27,7 +27,7 @@ import { currentDir, StandaloneConfig, createLogger } from '@repo/kitties-api';
 
 const config = new StandaloneConfig();
 const dockerEnv = new DockerComposeEnvironment(path.resolve(currentDir, '..'), 'standalone.yml')
-  .withWaitStrategy('kitties-proof-server', Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1))
-  .withWaitStrategy('kitties-indexer', Wait.forLogMessage(/starting indexing/, 1));
+  .withWaitStrategy('kitties-proof-server', Wait.forHealthCheck())
+  .withWaitStrategy('kitties-indexer', Wait.forHealthCheck());
 const logger = await createLogger(config.logDir);
 await run(config, logger, dockerEnv);

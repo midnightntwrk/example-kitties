@@ -21,7 +21,6 @@
  */
 
 import React from 'react';
-import type { Address } from '@midnight-ntwrk/wallet-api';
 import { Alert, Button, CircularProgress, Typography } from '@mui/material';
 import ErrorIcon from '@mui/icons-material/Error';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
@@ -46,7 +45,7 @@ export const WalletWidget = (
   isConnecting: boolean,
   _logger: Logger,
   isFloatingOpen: boolean,
-  address?: Address,
+  address?: string,
   walletError?: MidnightWalletErrorType,
 ): React.ReactNode => {
   const box = (content: React.ReactNode): React.ReactNode => {

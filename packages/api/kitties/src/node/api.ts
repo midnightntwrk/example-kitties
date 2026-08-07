@@ -19,261 +19,387 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-// These functions require Node.js environment and are used primarily by the CLI
+// Node.js-only wallet wiring for the CLI. Builds a WalletFacade (shielded +
+// unshielded + dust sub-wallets) and exposes it as a midnight-js provider.
 
-import { type CoinInfo, nativeToken, Transaction, type TransactionId } from '@midnight-ntwrk/ledger';
+// Ensure globalThis.crypto exists before any crypto-dependent code runs. Some
+// Node runtimes (notably the ts-node ESM loader used by the CLI) do not expose
+// it as a global. This side-effect import must come first.
+import './crypto-polyfill.js';
+
 import {
-  type BalancedTransaction,
-  createBalancedTx,
-  type UnbalancedTransaction,
-  type WalletProvider,
-} from '@midnight-ntwrk/midnight-js-types';
-import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
-import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { toHex } from '@midnight-ntwrk/midnight-js-utils';
-import * as Rx from 'rxjs';
-import * as env from '../common/env.js';
-import { WalletBuilder, type Resource } from '@midnight-ntwrk/wallet';
-import type { Wallet } from '@midnight-ntwrk/wallet-api';
-import { type Config, contractConfig, StandaloneConfig } from '../common/config.js';
+  HDWallet,
+  Roles,
+  generateRandomSeed,
+  WalletFacade,
+  ShieldedWallet,
+  DustWallet,
+  UnshieldedWallet,
+  createKeystore,
+  PublicKey,
+  NoOpTransactionHistoryStorage,
+  type FacadeState,
+  type UnshieldedKeystore,
+} from '@midnightntwrk/wallet-sdk';
+import * as ledger from '@midnight-ntwrk/midnight-js-protocol/ledger';
+import { type MidnightProvider, type UnboundTransaction, type WalletProvider } from '@midnight-ntwrk/midnight-js-types';
+import type { CoinPublicKey, EncPublicKey, FinalizedTransaction } from '@midnight-ntwrk/midnight-js-protocol/ledger';
+import { ttlOneHour, toHex } from '@midnight-ntwrk/midnight-js-utils';
+import { getNetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { type KittiesPrivateStateId, type KittiesProviders, type DeployedKittiesContract } from '../common/types.js';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
+import { Buffer } from 'buffer';
+import * as Rx from 'rxjs';
+import type { Logger } from 'pino';
+
+import { type Config, contractConfig, StandaloneConfig, PreprodConfig, PreviewConfig } from '../common/config.js';
+import { KittiesPrivateStateId, type KittiesProviders, type DeployedKittiesContract } from '../common/types.js';
 import { randomBytes } from '../common/utils.js';
 
+/**
+ * A sub-wallet's progress object is "strictly complete" once it has caught up to
+ * the chain tip. The facade exposes a combined `FacadeState.isSynced` for the
+ * all-three case (used as the sync gate below); this per-progress helper is for
+ * the spots that need a single sub-wallet's status: the progress log and the
+ * NIGHT wait, which only depends on the unshielded sub-wallet.
+ */
+const isProgressStrictlyComplete = (progress: { isStrictlyComplete(): boolean }): boolean =>
+  progress.isStrictlyComplete();
+
+/** Sum the value of a set of unshielded UTxOs (the wallet's NIGHT coins). */
+const nightFromUtxos = (coins: ReadonlyArray<{ utxo: { value: bigint } }>): bigint =>
+  coins.reduce((total, c) => total + c.utxo.value, 0n);
+
+/** Derive the three role keys (shielded, unshielded, dust) from a hex seed. */
+const deriveKeys = (seed: string) => {
+  const hdWallet = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
+  if (hdWallet.type !== 'seedOk') {
+    throw new Error('Failed to initialize HDWallet from seed. Is the seed a valid hex string?');
+  }
+  const derived = hdWallet.hdWallet
+    .selectAccount(0)
+    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
+    .deriveKeysAt(0);
+  if (derived.type !== 'keysDerived') {
+    throw new Error('Failed to derive keys from seed.');
+  }
+  hdWallet.hdWallet.clear();
+  return derived.keys;
+};
+
+/**
+ * Build a unified WalletFacade from a seed. Mirrors the documented
+ * "generating DUST programmatically" wallet construction.
+ */
+const buildWalletFacade = async (config: Config, seed: string) => {
+  setNetworkId(config.networkId);
+
+  const keys = deriveKeys(seed);
+  const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(keys[Roles.Zswap]);
+  const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
+  const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], getNetworkId());
+
+  const indexerClientConnection = {
+    indexerHttpUrl: config.indexer,
+    indexerWsUrl: config.indexerWS,
+  };
+  const shieldedConfig = {
+    networkId: getNetworkId(),
+    indexerClientConnection,
+    provingServerUrl: new URL(config.proofServer),
+    relayURL: new URL(config.node.replace(/^http/, 'ws')),
+  };
+  const unshieldedConfig = {
+    networkId: getNetworkId(),
+    indexerClientConnection,
+    txHistoryStorage: new NoOpTransactionHistoryStorage(),
+  };
+  const dustConfig = {
+    ...shieldedConfig,
+    // Fee parameters for the DUST balancer.
+    //
+    // additionalFeeOverhead MUST be positive. On an idle network the per-block
+    // fee rate can be ~0, so a fee computed from feeBlocksMargin alone rounds to
+    // zero; the balancer then builds an empty DustActions and the node rejects
+    // the transaction as NotNormalized (Invalid Transaction: Custom error 117).
+    // A small fixed overhead (1_000_000n Specks) forces a non-zero fee so the
+    // transaction normalizes and is accepted. Verified: 0n -> first contract
+    // call rejected with 117; 1_000_000n -> deploy and call both succeed.
+    //
+    // ledgerParams is required for the balancer's fee math; omitting it yields a
+    // wrong fee.
+    costParameters: {
+      ledgerParams: ledger.LedgerParameters.initialParameters(),
+      additionalFeeOverhead: 1_000_000n,
+      feeBlocksMargin: 5,
+    },
+  };
+
+  const dustParameters = ledger.LedgerParameters.initialParameters().dust;
+  const wallet = await WalletFacade.init({
+    configuration: { ...shieldedConfig, ...unshieldedConfig, ...dustConfig },
+    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
+    unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
+    dust: (cfg) => DustWallet(cfg).startWithSecretKey(dustSecretKey, dustParameters),
+  });
+  await wallet.start(shieldedSecretKeys, dustSecretKey);
+
+  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+};
+
+/**
+ * Provider implementing the midnight-js v4 wallet interfaces on top of the
+ * WalletFacade recipe-based balancing flow.
+ */
+export class MidnightWalletProvider implements WalletProvider, MidnightProvider {
+  private constructor(
+    private readonly logger: Logger,
+    readonly wallet: WalletFacade,
+    private readonly shieldedSecretKeys: ledger.ZswapSecretKeys,
+    private readonly dustSecretKey: ledger.DustSecretKey,
+    private readonly unshieldedKeystore: UnshieldedKeystore,
+  ) {}
+
+  getCoinPublicKey(): CoinPublicKey {
+    return this.shieldedSecretKeys.coinPublicKey;
+  }
+
+  getEncryptionPublicKey(): EncPublicKey {
+    return this.shieldedSecretKeys.encryptionPublicKey;
+  }
+
+  async balanceTx(tx: UnboundTransaction, ttl: Date = ttlOneHour()): Promise<FinalizedTransaction> {
+    const recipe = await this.wallet.balanceUnboundTransaction(
+      tx,
+      { shieldedSecretKeys: this.shieldedSecretKeys, dustSecretKey: this.dustSecretKey },
+      { ttl },
+    );
+    const signed = await this.wallet.signRecipe(recipe, (payload) => this.unshieldedKeystore.signData(payload));
+    return this.wallet.finalizeRecipe(signed);
+  }
+
+  submitTx(tx: FinalizedTransaction): Promise<string> {
+    return this.wallet.submitTransaction(tx);
+  }
+
+  async close(): Promise<void> {
+    await this.wallet.stop();
+  }
+
+  /**
+   * Build the provider from a seed, wait for the wallet to sync and receive
+   * NIGHT, and (on non-undeployed networks) register NIGHT for DUST generation
+   * so transaction fees can be paid.
+   */
+  static async build(
+    logger: Logger,
+    config: Config,
+    seed: string,
+    showSeed = false,
+  ): Promise<MidnightWalletProvider> {
+    const { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore } = await buildWalletFacade(config, seed);
+    const provider = new MidnightWalletProvider(
+      logger,
+      wallet,
+      shieldedSecretKeys,
+      dustSecretKey,
+      unshieldedKeystore,
+    );
+
+    // Only surface the seed at the moment a wallet is created, so the user can
+    // record it. Never display it on restore-from-seed or on subsequent runs:
+    // a seed is sensitive and re-displaying it is an exposure risk.
+    if (showSeed) {
+      logger.info(`New wallet seed (write this down, it will not be shown again): ${seed}`);
+    }
+    // Print the unshielded address up front so it can be funded from the faucet
+    // while the wallet syncs. The faucet sends tNIGHT to the unshielded address.
+    logger.info(`Unshielded address (fund this from the faucet): ${unshieldedKeystore.getBech32Address()}`);
+    if (config.faucetUrl) {
+      logger.info(`Faucet: ${config.faucetUrl}`);
+    }
+    logger.info('Waiting for wallet to sync...');
+    let state = await provider.waitForFullSync();
+
+    const nightBalance = nightFromUtxos(state.unshielded.availableCoins);
+    if (nightBalance <= 0n) {
+      logger.info('No NIGHT yet. Waiting to receive NIGHT at the unshielded address above...');
+      await provider.waitForNight();
+      state = await provider.waitForFullSync();
+    }
+    logger.info('NIGHT received.');
+
+    // Register NIGHT for DUST generation if the wallet has no DUST yet, then
+    // re-sync. DUST then accrues from the registered NIGHT over block-time and
+    // the balancer draws on it at transaction time. Mirrors the canonical
+    // testkit waitForFunds: register-if-zero, re-sync, no spendable-dust wait.
+    await provider.ensureDustRegistered(state);
+
+    return provider;
+  }
+
+  /**
+   * Resolves with the first wallet state that is fully synced, gating on the
+   * facade's own `FacadeState.isSynced` (all three sub-wallets strictly complete).
+   * Reading balances or UTxOs before this can yield a partial view.
+   */
+  private async waitForFullSync(): Promise<FacadeState> {
+    // No timeout: sync time depends on the network and chain depth and is not
+    // predictable, so the wallet waits until all three sub-wallets reach the
+    // chain tip rather than failing after an arbitrary deadline. Mirrors the
+    // reference example-bboard sync helpers, which impose no timeout. The
+    // throttled progress log keeps the wait visible.
+    return Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(5_000),
+        Rx.tap((s: FacadeState) =>
+          this.logger.info(
+            `Syncing: shielded=${isProgressStrictlyComplete(s.shielded.state.progress)} ` +
+              `unshielded=${isProgressStrictlyComplete(s.unshielded.progress)} ` +
+              `dust=${isProgressStrictlyComplete(s.dust.state.progress)}`,
+          ),
+        ),
+        Rx.filter((s: FacadeState) => s.isSynced),
+      ),
+    );
+  }
+
+  /** Resolves once the unshielded wallet holds a positive NIGHT balance. */
+  private async waitForNight(): Promise<bigint> {
+    // No timeout: the user funds the unshielded address from the faucet, which
+    // can take an unpredictable amount of time. Wait until NIGHT arrives rather
+    // than failing after an arbitrary deadline. Mirrors example-bboard's
+    // waitForUnshieldedFunds, which has no timeout.
+    return Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(10_000),
+        Rx.filter((s: FacadeState) => isProgressStrictlyComplete(s.unshielded.progress)),
+        Rx.map((s: FacadeState) => nightFromUtxos(s.unshielded.availableCoins)),
+        Rx.filter((balance) => balance > 0n),
+      ),
+    );
+  }
+
+  /**
+   * Ensure the wallet can pay fees: register NIGHT UTxOs for DUST generation if
+   * none are registered yet, then wait for DUST to actually generate.
+   *
+   * On a freshly booted standalone node, genesis NIGHT may already be registered
+   * for DUST generation, so `dust.balance(new Date())` reads non-zero from
+   * projection even though almost no DUST has *generated* yet (little block-time
+   * has elapsed). The balancer draws on generated DUST, so deploying immediately
+   * fails with "could not balance dust". Mirrors the official
+   * generating-dust-programmatically guide: register only the unregistered NIGHT
+   * UTxOs (if any), then always wait until the wallet is synced AND
+   * `dust.balance(new Date()) > 0n`, which only becomes true once the node has
+   * sealed enough blocks to generate spendable DUST (typically 1-2 minutes).
+   */
+  private async ensureDustRegistered(syncedState: FacadeState): Promise<void> {
+    const nightRaw = ledger.unshieldedToken().raw;
+    const unregistered = syncedState.unshielded.availableCoins.filter(
+      (coin) => coin.utxo.type === nightRaw && coin.meta.registeredForDustGeneration === false,
+    );
+
+    if (unregistered.length > 0) {
+      this.logger.info(`Registering ${unregistered.length} NIGHT UTxO(s) for DUST generation...`);
+      const recipe = await this.wallet.registerNightUtxosForDustGeneration(
+        unregistered,
+        this.unshieldedKeystore.getPublicKey(),
+        (payload) => this.unshieldedKeystore.signData(payload),
+      );
+      const finalized = await this.wallet.finalizeRecipe(recipe);
+      const txId = await this.wallet.submitTransaction(finalized);
+      this.logger.info(`DUST registration submitted: ${txId}`);
+    } else {
+      this.logger.info('NIGHT already registered for DUST generation.');
+    }
+
+    await this.waitForGeneratedDust();
+  }
+
+  /**
+   * Resolve once the wallet is fully synced and holds a positive generated DUST
+   * balance. On a cold standalone node this gates on block-time: DUST generates
+   * from registered NIGHT as the node seals blocks, so this can take 1-2 minutes
+   * on first run. Mirrors the official generating-dust-programmatically guide's
+   * post-registration wait (`isSynced && dust.balance(now) > 0n`).
+   */
+  private async waitForGeneratedDust(timeoutMs = 300_000): Promise<void> {
+    this.logger.info('Waiting for DUST to generate (this may take 1-2 minutes on a fresh node)...');
+    // On a cold standalone node the wall-clock projection `dust.balance(now)`
+    // can read non-zero before the chain has actually generated spendable DUST
+    // at its latest block (the balancer draws on generated, not projected,
+    // DUST). Gating on the balance alone can therefore pass instantly and the
+    // deploy still fails. To guarantee real block-time elapses, require the
+    // generated DUST balance to be observed positive across a settle window so
+    // the node has sealed enough blocks for the balancer to draw on it.
+    const settleMs = 30_000;
+    let firstPositiveAt: number | undefined;
+    await Rx.firstValueFrom(
+      this.wallet.state().pipe(
+        Rx.throttleTime(5_000),
+        Rx.tap((s: FacadeState) => this.logger.info(`DUST balance: ${s.dust.balance(new Date())}`)),
+        Rx.filter((s: FacadeState) => s.isSynced && s.dust.balance(new Date()) > 0n),
+        Rx.filter(() => {
+          const now = Date.now();
+          if (firstPositiveAt === undefined) {
+            firstPositiveAt = now;
+            return false;
+          }
+          return now - firstPositiveAt >= settleMs;
+        }),
+        Rx.timeout({
+          each: timeoutMs,
+          with: () => Rx.throwError(() => new Error(`DUST did not generate within ${timeoutMs}ms`)),
+        }),
+      ),
+    );
+    this.logger.info('DUST ready.');
+  }
+}
+
+/** Assemble the full provider set midnight-js needs for deploy/connect. */
 export const configureProviders = async (
-  wallet: any, // Wallet & Resource,
+  walletProvider: MidnightWalletProvider,
   config: Config,
-  zkConfigProvider: any, // Should be ZKConfigProvider<'increment'>, but kept as any for flexibility
+  zkConfigProvider: any,
 ): Promise<KittiesProviders> => {
-  const walletAndMidnightProvider = await createWalletAndMidnightProvider(wallet);
+  const accountId = toHex(walletProvider.getCoinPublicKey() as unknown as Uint8Array);
   return {
     privateStateProvider: levelPrivateStateProvider<typeof KittiesPrivateStateId>({
       privateStateStoreName: contractConfig.privateStateStoreName,
-    }) as any, // Type assertion to bypass strict typing
+      accountId,
+      // Deterministic local password derived from the account id. Satisfies the
+      // complexity rule (>=3 char classes, no 3 identical consecutive chars).
+      privateStoragePasswordProvider: () => Buffer.from(accountId, 'hex').toString('base64') + '!',
+    }),
     publicDataProvider: indexerPublicDataProvider(config.indexer, config.indexerWS),
-    zkConfigProvider: zkConfigProvider as any, // injected
-    proofProvider: httpClientProofProvider(config.proofServer) as any,
-    walletProvider: walletAndMidnightProvider as any,
-    midnightProvider: walletAndMidnightProvider as any,
+    zkConfigProvider,
+    proofProvider: httpClientProofProvider(config.proofServer, zkConfigProvider),
+    walletProvider,
+    midnightProvider: walletProvider,
   } as KittiesProviders;
 };
 
-export const createWalletAndMidnightProvider = async (wallet: Wallet): Promise<WalletProvider & any> => {
-  const state = await Rx.firstValueFrom(wallet.state());
-  return {
-    coinPublicKey: (state as any).coinPublicKey,
-    encryptionPublicKey: (state as any).encryptionPublicKey,
-    balanceTx(tx: UnbalancedTransaction, newCoins: CoinInfo[]): Promise<BalancedTransaction> {
-      return wallet
-        .balanceTransaction(
-          ZswapTransaction.deserialize(tx.serialize(getLedgerNetworkId()), getZswapNetworkId()),
-          newCoins,
-        )
-        .then((tx: any) => wallet.proveTransaction(tx))
-        .then((zswapTx: any) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
-        .then(createBalancedTx);
-    },
-    submitTx(tx: BalancedTransaction): Promise<TransactionId> {
-      return wallet.submitTransaction(tx);
-    },
-  };
-};
-
-export const waitForSync = (wallet: Wallet) =>
-  Rx.firstValueFrom(
-    wallet.state().pipe(
-      Rx.throttleTime(5_000),
-      Rx.tap((state: any) => {
-        const applyGap = state.syncProgress?.lag.applyGap ?? 0n;
-        const sourceGap = state.syncProgress?.lag.sourceGap ?? 0n;
-        console.log(
-          `Waiting for funds. Backend lag: ${sourceGap}, wallet lag: ${applyGap}, transactions=${state.transactionHistory.length}`,
-        );
-      }),
-      Rx.filter((state: any) => {
-        // Let's allow progress only if wallet is synced fully
-        return state.syncProgress !== undefined && state.syncProgress.synced;
-      }),
-    ),
-  );
-
-export const waitForSyncProgress = async (wallet: Wallet) =>
-  await Rx.firstValueFrom(
-    wallet.state().pipe(
-      Rx.throttleTime(5_000),
-      Rx.tap((state: any) => {
-        const applyGap = state.syncProgress?.lag.applyGap ?? 0n;
-        const sourceGap = state.syncProgress?.lag.sourceGap ?? 0n;
-        console.log(
-          `Waiting for funds. Backend lag: ${sourceGap}, wallet lag: ${applyGap}, transactions=${state.transactionHistory.length}`,
-        );
-      }),
-      Rx.filter((state: any) => {
-        // Let's allow progress only if syncProgress is defined
-        return state.syncProgress !== undefined;
-      }),
-    ),
-  );
-
-export const waitForFunds = (wallet: Wallet) =>
-  Rx.firstValueFrom(
-    wallet.state().pipe(
-      Rx.throttleTime(10_000),
-      Rx.tap((state: any) => {
-        const applyGap = state.syncProgress?.lag.applyGap ?? 0n;
-        const sourceGap = state.syncProgress?.lag.sourceGap ?? 0n;
-        console.log(
-          `Waiting for funds. Backend lag: ${sourceGap}, wallet lag: ${applyGap}, transactions=${state.transactionHistory.length}`,
-        );
-      }),
-      Rx.filter((state: any) => {
-        // Let's allow progress only if wallet is synced
-        return state.syncProgress?.synced === true;
-      }),
-      Rx.map((s: any) => (s as any).balances[nativeToken()] ?? 0n),
-      Rx.filter((balance: any) => balance > 0n),
-    ),
-  );
-
 export const buildWalletAndWaitForFunds = async (
-  { indexer, indexerWS, node, proofServer }: Config,
+  config: Config,
   seed: string,
-  filename: string,
-): Promise<Wallet & Resource> => {
-  const directoryPath = process.env.SYNC_CACHE;
-  let wallet: Wallet & Resource;
-  if (directoryPath !== undefined) {
-    if (env.existsSync(`${directoryPath}/${filename}`)) {
-      console.log(`Attempting to restore state from ${directoryPath}/${filename}`);
-      try {
-        const serializedStream = env.createReadStream(`${directoryPath}/${filename}`);
-        const serialized = await streamToString(serializedStream);
-        serializedStream.on('finish', () => {
-          serializedStream.close();
-        });
-        wallet = await WalletBuilder.restore(indexer, indexerWS, proofServer, node, seed, serialized, 'info');
-        wallet.start();
-        const stateObject = JSON.parse(serialized);
-        if ((await isAnotherChain(wallet, Number(stateObject.offset))) === true) {
-          console.log('The chain was reset, building wallet from scratch');
-          wallet = await WalletBuilder.build(indexer, indexerWS, proofServer, node, seed, getZswapNetworkId(), 'info');
-          wallet.start();
-        } else {
-          const newState = await waitForSync(wallet);
-          // allow for situations when there's no new index in the network between runs
-          const typedState = newState as any;
-          if (typedState.syncProgress?.synced) {
-            console.log('Wallet was able to sync from restored state');
-          } else {
-            console.log(`Offset: ${stateObject.offset}`);
-            console.log(`SyncProgress.lag.applyGap: ${typedState.syncProgress?.lag.applyGap}`);
-            console.log(`SyncProgress.lag.sourceGap: ${typedState.syncProgress?.lag.sourceGap}`);
-            console.log('Wallet was not able to sync from restored state, building wallet from scratch');
-            wallet = await WalletBuilder.build(
-              indexer,
-              indexerWS,
-              proofServer,
-              node,
-              seed,
-              getZswapNetworkId(),
-              'info',
-            );
-            wallet.start();
-          }
-        }
-      } catch (error: unknown) {
-        if (typeof error === 'string') {
-          console.log(error);
-        } else if (error instanceof Error) {
-          console.log(error.message);
-        } else {
-          console.log(error);
-        }
-        console.log('Wallet was not able to restore using the stored state, building wallet from scratch');
-        wallet = await WalletBuilder.build(indexer, indexerWS, proofServer, node, seed, getZswapNetworkId(), 'info');
-        wallet.start();
-      }
-    } else {
-      console.log('Wallet save file not found, building wallet from scratch');
-      wallet = await WalletBuilder.build(indexer, indexerWS, proofServer, node, seed, getZswapNetworkId(), 'info');
-      wallet.start();
-    }
-  } else {
-    console.log('File path for save file not found, building wallet from scratch');
-    wallet = await WalletBuilder.build(indexer, indexerWS, proofServer, node, seed, getZswapNetworkId(), 'info');
-    wallet.start();
-  }
+  _filename: string,
+  logger: Logger,
+): Promise<MidnightWalletProvider> => MidnightWalletProvider.build(logger, config, seed);
 
-  const state = await Rx.firstValueFrom(wallet.state());
-  console.log(`Your wallet seed is: ${seed}`);
-  console.log(`Your wallet address is: ${(state as any).address}`);
-  let balance = (state as any).balances[nativeToken()];
-  if (balance === undefined || balance === 0n) {
-    console.log(`Your wallet balance is: 0`);
-    console.log(`Waiting to receive tokens...`);
-    balance = await waitForFunds(wallet);
-  }
-  console.log(`Your wallet balance is: ${balance}`);
-  return wallet;
+export const buildFreshWallet = async (config: Config, logger: Logger): Promise<MidnightWalletProvider> =>
+  MidnightWalletProvider.build(logger, config, toHex(randomBytes(32)), true);
+
+/** Generate a fresh random wallet seed as a hex string. */
+export const newWalletSeed = (): string => toHex(Buffer.from(generateRandomSeed()));
+
+export {
+  type KittiesProviders,
+  type DeployedKittiesContract,
+  type Config,
+  StandaloneConfig,
+  PreprodConfig,
+  PreviewConfig,
 };
-
-export const buildFreshWallet = async (config: Config): Promise<Wallet & Resource> =>
-  await buildWalletAndWaitForFunds(config, toHex(randomBytes(32)), '');
-
-export const saveState = async (wallet: Wallet, filename: string) => {
-  const directoryPath = process.env.SYNC_CACHE;
-  if (directoryPath !== undefined) {
-    console.log(`Saving state in ${directoryPath}/${filename}`);
-    try {
-      await env.mkdir(directoryPath, { recursive: true });
-      const serializedState = await wallet.serializeState();
-      const writer = env.createWriteStream(`${directoryPath}/${filename}`);
-      writer.write(serializedState);
-      writer.on('finish', function () {
-        console.log(`File '${directoryPath}/${filename}' written successfully.`);
-      });
-      writer.on('error', function (err) {
-        console.log(err);
-      });
-      writer.end();
-    } catch (e) {
-      if (typeof e === 'string') {
-        console.log(e);
-      } else if (e instanceof Error) {
-        console.log(e.message);
-      }
-    }
-  } else {
-    console.log('Not saving cache as sync cache was not defined');
-  }
-};
-
-export const streamToString = async (stream: env.ReadStream): Promise<string> => {
-  const chunks: Buffer[] = [];
-  return await new Promise((resolve, reject) => {
-    stream.on('data', (chunk) => chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk));
-    stream.on('error', (err) => {
-      reject(err);
-    });
-    stream.on('end', () => {
-      resolve(Buffer.concat(chunks).toString('utf8'));
-    });
-  });
-};
-
-export const isAnotherChain = async (wallet: Wallet, offset: number) => {
-  await waitForSyncProgress(wallet);
-  // Here wallet does not expose the offset block it is synced to, that is why this workaround
-  const walletOffset = Number(JSON.parse(await wallet.serializeState()).offset);
-  if (walletOffset < offset - 1) {
-    console.log(`Your offset offset is: ${walletOffset} restored offset: ${offset} so it is another chain`);
-    return true;
-  } else {
-    console.log(`Your offset offset is: ${walletOffset} restored offset: ${offset} ok`);
-    return false;
-  }
-};
-
-export { type KittiesProviders, type DeployedKittiesContract, type Config, StandaloneConfig };

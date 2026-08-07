@@ -1,7 +1,6 @@
 /**
- * @file testnet-remote.ts
+ * @file preview-remote.ts
  * @license GPL-3.0
- *
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,11 +14,15 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ * DISCLAIMER: This software is provided "as is" without any warranty.
+ * Use at your own risk. The author assumes no responsibility for any
+ * damages or losses arising from the use of this software.
  */
 
 import { run } from './cli.js';
-import { TestnetRemoteConfig, createLogger } from '@repo/kitties-api';
+import { PreviewConfig, createLogger } from '@repo/kitties-api';
 
-const config = new TestnetRemoteConfig();
+const config = new PreviewConfig();
 const logger = await createLogger(config.logDir);
 await run(config, logger);

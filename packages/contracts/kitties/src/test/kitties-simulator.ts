@@ -27,14 +27,15 @@ import {
   type CircuitContext,
   QueryContext,
   sampleContractAddress,
-  constructorContext,
+  createConstructorContext,
+  CostModel,
   type CoinPublicKey
 } from "@midnight-ntwrk/compact-runtime";
 import {
   Contract,
   type Ledger,
   ledger
-} from "../managed/kitties/contract/index.cjs";
+} from "../managed/kitties/contract/index.js";
 import { type KittiesPrivateState, witnesses } from "../witnesses.js";
 import { toHex, fromHex, isHex } from "@midnight-ntwrk/midnight-js-utils";
 import { TextEncoder } from "util";
@@ -50,13 +51,13 @@ export class KittiesSimulator {
       currentContractState,
       currentZswapLocalState
     } = this.contract.initialState(
-      constructorContext({}, this.createPublicKey("Alice"))
+      createConstructorContext({}, this.createPublicKey("Alice"))
     );
     this.baseContext = {
       currentPrivateState,
       currentZswapLocalState,
-      originalState: currentContractState,
-      transactionContext: new QueryContext(
+      costModel: CostModel.initialCostModel(),
+      currentQueryContext: new QueryContext(
         currentContractState.data,
         sampleContractAddress()
       )
@@ -66,7 +67,7 @@ export class KittiesSimulator {
   // === Contract State Access ===
 
   public getLedger(): Ledger {
-    return ledger(this.baseContext.originalState.data);
+    return ledger(this.baseContext.currentQueryContext.state);
   }
 
   public getPrivateState(): KittiesPrivateState {
@@ -156,13 +157,13 @@ export class KittiesSimulator {
 
     // Reinitialize with the new user
     const { currentPrivateState, currentZswapLocalState } =
-      tempSimulator.contract.initialState(constructorContext({}, user));
+      tempSimulator.contract.initialState(createConstructorContext({}, user));
 
     this.baseContext = {
       currentPrivateState,
       currentZswapLocalState,
-      originalState: this.baseContext.originalState, // Keep the same state
-      transactionContext: this.baseContext.transactionContext
+      costModel: this.baseContext.costModel,
+      currentQueryContext: this.baseContext.currentQueryContext // Keep the same on-chain state
     };
   }
 

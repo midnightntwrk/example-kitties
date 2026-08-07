@@ -8,7 +8,7 @@
   "dependencies": {
     "@midnight-ntwrk/kitties-contract": "*",
     "@repo/kitties-api": "^0.0.1",
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts"
+    "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf"
   },
   "devDependencies": {
     "eslint": "^9.28.0",
@@ -17,12 +17,13 @@
   "scripts": {
     "build": "rm -rf dist && tsc --project tsconfig.build.json",
     "lint": "eslint src",
-    "start-testnet-remote": "yarn build && yarn testnet-remote",
-    "start-testnet-remote-ps": "yarn build && yarn testnet-remote-ps",
+    "start-preprod-remote": "yarn build && yarn preprod-remote",
+    "start-preprod-remote-ps": "yarn build && yarn preprod-remote-ps",
+    "start-preview-remote": "yarn build && yarn preview-remote",
     "standalone": "docker compose -f ../standalone.yml pull && node --experimental-specifier-resolution=node --loader ts-node/esm src/standalone.ts",
-    "testnet-local": "node --experimental-specifier-resolution=node --loader ts-node/esm src/testnet-local.ts",
-    "testnet-remote": "node --experimental-specifier-resolution=node --loader ts-node/esm src/testnet-remote.ts",
-    "testnet-remote-ps": "cp -r ../proof-server-testnet.yml ./dist/ && node --experimental-specifier-resolution=node --loader ts-node/esm src/testnet-remote-start-proof-server.ts",
+    "preprod-remote": "node --experimental-specifier-resolution=node --loader ts-node/esm src/preprod-remote.ts",
+    "preprod-remote-ps": "cp -r ../proof-server.yml ./dist/ && node --experimental-specifier-resolution=node --loader ts-node/esm src/preprod-remote-ps.ts",
+    "preview-remote": "node --experimental-specifier-resolution=node --loader ts-node/esm src/preview-remote.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

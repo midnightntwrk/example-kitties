@@ -1,6 +1,7 @@
 /**
- * @file testnet-local.ts
+ * @file preprod-remote.ts
  * @license GPL-3.0
+ *
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,15 +15,11 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
- *
- * DISCLAIMER: This software is provided "as is" without any warranty.
- * Use at your own risk. The author assumes no responsibility for any
- * damages or losses arising from the use of this software.
  */
 
 import { run } from './cli.js';
-import { TestnetLocalConfig, createLogger } from '@repo/kitties-api';
+import { PreprodConfig, createLogger } from '@repo/kitties-api';
 
-const config = new TestnetLocalConfig();
+const config = new PreprodConfig();
 const logger = await createLogger(config.logDir);
 await run(config, logger);

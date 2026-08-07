@@ -26,10 +26,11 @@
 import {
   type Config,
   StandaloneConfig,
+  PreprodConfig,
+  PreviewConfig,
   currentDir,
-  TestnetRemoteConfig,
   buildWalletAndWaitForFunds,
-  saveState,
+  type MidnightWalletProvider,
 } from '@repo/kitties-api';
 import {
   DockerComposeEnvironment,
@@ -39,13 +40,10 @@ import {
   Wait,
 } from 'testcontainers';
 import path from 'path';
-import * as Rx from 'rxjs';
-import { nativeToken } from '@midnight-ntwrk/ledger';
 import type { Logger } from 'pino';
-import type { Wallet } from '@midnight-ntwrk/wallet-api';
-import type { Resource } from '@midnight-ntwrk/wallet';
 import { expect } from 'vitest';
 
+// Genesis-funded wallet seed for the local standalone (undeployed) network.
 const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 
 export interface TestConfiguration {
@@ -83,9 +81,9 @@ export function parseArgs(required: string[]): TestConfiguration {
     }
   }
 
-  let cfg: Config = new TestnetRemoteConfig();
+  let cfg: Config = new PreprodConfig();
   let env = '';
-  let psMode = 'undeployed';
+  let psMode = 'preprod';
   let cacheFileName = '';
   if (required.includes('env')) {
     if (process.env.TEST_ENV !== undefined) {
@@ -94,9 +92,14 @@ export function parseArgs(required: string[]): TestConfiguration {
       throw new Error('TEST_ENV environment variable is not defined.');
     }
     switch (env) {
-      case 'testnet':
-        cfg = new TestnetRemoteConfig();
-        psMode = 'testnet';
+      case 'preprod':
+        cfg = new PreprodConfig();
+        psMode = 'preprod';
+        cacheFileName = `${seed.substring(0, 7)}-${psMode}.state`;
+        break;
+      case 'preview':
+        cfg = new PreviewConfig();
+        psMode = 'preview';
         cacheFileName = `${seed.substring(0, 7)}-${psMode}.state`;
         break;
       default:
@@ -118,7 +121,7 @@ export class TestEnvironment {
   private env: StartedDockerComposeEnvironment | undefined;
   private dockerEnv: DockerComposeEnvironment | undefined;
   private container: StartedTestContainer | undefined;
-  private wallet: (Wallet & Resource) | undefined;
+  private walletProvider: MidnightWalletProvider | undefined;
   private testConfig: TestConfiguration;
 
   constructor(logger: Logger) {
@@ -131,7 +134,7 @@ export class TestEnvironment {
       this.testConfig = parseArgs(['seed', 'env']);
       this.logger.info(`Test wallet seed: ${this.testConfig.seed}`);
       this.logger.info('Proof server starting...');
-      this.container = await TestEnvironment.getProofServerContainer(this.testConfig.psMode);
+      this.container = await TestEnvironment.getProofServerContainer();
       this.testConfig.dappConfig = {
         ...this.testConfig.dappConfig,
         proofServer: `http://${this.container.getHost()}:${this.container.getMappedPort(6300).toString()}`,
@@ -142,11 +145,9 @@ export class TestEnvironment {
       const composeFile = process.env.COMPOSE_FILE ?? 'standalone.yml';
       this.logger.info(`Using compose file: ${composeFile}`);
       this.dockerEnv = new DockerComposeEnvironment(path.resolve(currentDir, '..'), composeFile)
-        .withWaitStrategy(
-          'kitties-proof-server',
-          Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1),
-        )
-        .withWaitStrategy('kitties-indexer', Wait.forLogMessage(/starting indexing/, 1));
+        .withWaitStrategy('kitties-proof-server', Wait.forHealthCheck())
+        .withWaitStrategy('kitties-indexer', Wait.forHealthCheck())
+        .withWaitStrategy('kitties-node', Wait.forHealthCheck());
       this.env = await this.dockerEnv.up();
 
       this.testConfig.dappConfig = {
@@ -175,17 +176,17 @@ export class TestEnvironment {
     return mappedUrl.toString().replace(/\/+$/, '');
   };
 
-  static getProofServerContainer = async (env: string) =>
-    await new GenericContainer('midnightnetwork/proof-server:4.0.0')
+  static getProofServerContainer = async () =>
+    await new GenericContainer('midnightntwrk/proof-server:8.0.3')
       .withExposedPorts(6300)
-      .withCommand([`midnight-proof-server --network ${env}`])
+      .withCommand(['midnight-proof-server', '-v'])
       .withEnvironment({ RUST_BACKTRACE: 'full' })
-      .withWaitStrategy(Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1))
+      .withWaitStrategy(Wait.forHealthCheck())
       .start();
 
   shutdown = async () => {
-    if (this.wallet !== undefined) {
-      await this.wallet.close();
+    if (this.walletProvider !== undefined) {
+      await this.walletProvider.close();
     }
     if (this.env !== undefined) {
       this.logger.info('Test containers closing');
@@ -197,41 +198,15 @@ export class TestEnvironment {
     }
   };
 
-  getWallet = async () => {
+  getWalletProvider = async (): Promise<MidnightWalletProvider> => {
     this.logger.info('Setting up wallet');
-    this.wallet = await buildWalletAndWaitForFunds(
+    this.walletProvider = await buildWalletAndWaitForFunds(
       this.testConfig.dappConfig,
       this.testConfig.seed,
       this.testConfig.cacheFileName,
+      this.logger,
     );
-    expect(this.wallet).not.toBeNull();
-    const state = await Rx.firstValueFrom((this.wallet as Wallet).state());
-    // Defensive: check balances and valueOf safely, no 'any' usage
-    let balanceOk = false;
-    if (state && typeof state === 'object' && 'balances' in state) {
-      const balances = (state as { balances: Record<string, unknown> }).balances;
-      const bal = balances[nativeToken()];
-      if (typeof bal === 'bigint') {
-        balanceOk = bal > 0n;
-      } else if (
-        typeof bal === 'object' &&
-        bal !== null &&
-        typeof (bal as { valueOf?: unknown }).valueOf === 'function'
-      ) {
-        // Use valueOf and check type
-        const value = (bal as { valueOf: () => unknown }).valueOf();
-        if (typeof value === 'bigint' || typeof value === 'number') {
-          balanceOk = value > 0;
-        }
-      }
-    }
-    expect(balanceOk).toBe(true);
-    return this.wallet!;
-  };
-
-  saveWalletCache = async () => {
-    if (this.wallet !== undefined) {
-      await saveState(this.wallet, this.testConfig.cacheFileName);
-    }
+    expect(this.walletProvider).not.toBeNull();
+    return this.walletProvider;
   };
 }

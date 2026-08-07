@@ -6,10 +6,10 @@
   "type": "module",
   "dependencies": {
     "@repo/ui": "*",
-    "@types/node": "^24.0.3",
+    "@types/node": "^22.15.29",
     "@typescript-eslint/eslint-plugin": "^8.34.1",
     "@typescript-eslint/parser": "^8.34.1",
-    "midnight-contracts": "git+https://riusricardo@github.com/riusricardo/midnight-contracts",
+    "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
@@ -26,7 +26,7 @@
   },
   "scripts": {
     "start": "http-server --port 8080 ./dist --proxy 'http://127.0.0.1:8080?'",
-    "build": "rm -rf ./dist && tsc && vite build --mode testnet && cp -r ../../packages/contracts/kitties/dist/managed/kitties/keys ./dist/keys && cp -r ../../packages/contracts/kitties/dist/managed/kitties/zkir ./dist/zkir",
+    "build": "rm -rf ./dist && tsc && vite build && cp -r ../../packages/contracts/kitties/dist/managed/kitties/keys ./dist/keys && cp -r ../../packages/contracts/kitties/dist/managed/kitties/zkir ./dist/zkir",
     "preview": "vite preview",
     "lint": "eslint \"src/**/*.ts\""
   }

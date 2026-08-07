@@ -1,0 +1,3 @@
+# Normalize line endings to LF on checkin for all text files. Prevents CRLF
+# from leaking in on Windows/WSL and tripping prettier's lint check.
+* text=auto eol=lf

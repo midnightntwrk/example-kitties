@@ -23,14 +23,13 @@
  * damages or losses arising from the use of this software.
  */
 
-import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { getDirPath } from './path-resolver.js';
 import { existsSync, readFileSync, isNodeEnvironment, pathUtils } from './env.js';
 
 // Get current directory in a way that works in both ESM and CJS
 export const currentDir = getDirPath();
 
-// Find the workspace root by looking for package.json or node_modules
 /**
  * Find the workspace root directory by searching for specific markers.
  * This function is designed to be robust across different environments:
@@ -43,112 +42,84 @@ function findWorkspaceRoot(startDir: string): string {
   // In browser environments, we can't access the file system
   // so we return a sensible default path
   if (!isNodeEnvironment) {
-    // Return a default path that would work in most configurations
-    // This will be used for path construction but won't actually access files
     return '/workspace';
   }
 
-  // Use cache for performance if we've already computed this
   const cachedRoot = (globalThis as any).__workspaceRootCache;
   if (cachedRoot) {
-    console.log(`[DEBUG] Using cached workspace root: ${cachedRoot}`);
     return cachedRoot;
   }
 
-  // We'll search upwards from multiple starting points to be robust
-  // This covers cases where the package is installed in node_modules or linked in a workspace
   const searchDirs = [
     startDir,
     process.cwd(),
-    // Add additional common starting points if necessary
     pathUtils.resolve(process.cwd(), '..'),
     pathUtils.resolve(startDir, '..'),
   ];
   const visited = new Set<string>();
 
-  // Common workspace root indicator files
   const rootMarkers = [
-    // Monorepo tools
-    'turbo.json', // Turborepo
-    'nx.json', // Nx
-    'lerna.json', // Lerna
-    'pnpm-workspace.yaml', // PNPM workspace
-    'rush.json', // Rush
-    // Version control
-    '.git', // Git repository
-    // Config files often at root
-    '.eslintrc.js', // ESLint
+    'turbo.json',
+    'nx.json',
+    'lerna.json',
+    'pnpm-workspace.yaml',
+    'rush.json',
+    '.git',
+    '.eslintrc.js',
     '.eslintrc.json',
-    'tsconfig.base.json', // TypeScript project references
-    'jest.config.js', // Jest
-    'babel.config.js', // Babel
-    // Package managers
-    'yarn.lock', // Yarn
-    'package-lock.json', // NPM
-    'pnpm-lock.yaml', // PNPM
+    'tsconfig.base.json',
+    'jest.config.js',
+    'babel.config.js',
+    'yarn.lock',
+    'package-lock.json',
+    'pnpm-lock.yaml',
   ];
 
   for (const dir of searchDirs) {
-    let currentDir = pathUtils.resolve(dir);
+    let cursor = pathUtils.resolve(dir);
 
-    // Walk upwards through directory hierarchy
-    while (currentDir && !visited.has(currentDir)) {
-      visited.add(currentDir);
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
 
-      // Check for workspace root markers
       for (const marker of rootMarkers) {
-        const markerPath = pathUtils.join(currentDir, marker);
-        if (existsSync(markerPath)) {
-          console.log(`[DEBUG] Found workspace root with ${marker} at: ${currentDir}`);
-          // Cache the result for future calls
-          (globalThis as any).__workspaceRootCache = currentDir;
-          return currentDir;
+        if (existsSync(pathUtils.join(cursor, marker))) {
+          (globalThis as any).__workspaceRootCache = cursor;
+          return cursor;
         }
       }
 
-      // Check for package.json with workspaces field (yarn/npm workspaces)
-      const packageJsonPath = pathUtils.join(currentDir, 'package.json');
+      const packageJsonPath = pathUtils.join(cursor, 'package.json');
       if (existsSync(packageJsonPath)) {
         try {
           const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
           if (packageJson.workspaces) {
-            console.log(`[DEBUG] Found workspace root with package.json workspaces at: ${currentDir}`);
-            // Cache the result for future calls
-            (globalThis as any).__workspaceRootCache = currentDir;
-            return currentDir;
+            (globalThis as any).__workspaceRootCache = cursor;
+            return cursor;
           }
-        } catch (e) {
+        } catch {
           // Ignore JSON parsing errors, continue searching
-          console.warn(`[WARN] Could not parse package.json at ${packageJsonPath}: ${e}`);
         }
       }
 
-      // Check for monorepo structure patterns
-      const packagesDir = pathUtils.join(currentDir, 'packages');
-      const appsDir = pathUtils.join(currentDir, 'apps');
+      const packagesDir = pathUtils.join(cursor, 'packages');
+      const appsDir = pathUtils.join(cursor, 'apps');
       if (existsSync(packagesDir) && existsSync(appsDir)) {
-        console.log(`[DEBUG] Found workspace root with packages/ and apps/ at: ${currentDir}`);
-        // Cache the result for future calls
-        (globalThis as any).__workspaceRootCache = currentDir;
-        return currentDir;
+        (globalThis as any).__workspaceRootCache = cursor;
+        return cursor;
       }
 
-      // Move up one directory
-      const parentDir = pathUtils.dirname(currentDir);
-      if (parentDir === currentDir) {
-        break; // Reached root of file system
+      const parentDir = pathUtils.dirname(cursor);
+      if (parentDir === cursor) {
+        break;
       }
-      currentDir = parentDir;
+      cursor = parentDir;
     }
   }
 
-  console.log('[DEBUG] Workspace root not found, falling back to startDir.');
-  return startDir; // Absolute final fallback
+  return startDir;
 }
 
 const workspaceRoot = findWorkspaceRoot(currentDir);
-
-console.log('[DEBUG] Final workspace root:', workspaceRoot);
 
 export const contractConfig = {
   privateStateStoreName: 'kitties-private-state',
@@ -157,107 +128,124 @@ export const contractConfig = {
     : '/dist', // Browser fallback - relative path
 };
 
+/**
+ * Named Midnight networks this project targets. Mainnet is not yet available.
+ * `setNetworkId` takes a plain string in midnight-js v4; these are the canonical values.
+ */
+export type MidnightNetwork = 'undeployed' | 'preprod' | 'preview';
+
 export interface Config {
   logDir: string;
+  networkId: MidnightNetwork;
   indexer: string;
   indexerWS: string;
   node: string;
   proofServer: string;
+  /** Faucet UI for funding the wallet with tNIGHT. Undefined on undeployed (genesis-funded). */
+  faucetUrl?: string;
 }
 
-export class TestnetLocalConfig implements Config {
-  logDir = pathUtils.resolve(currentDir, '..', 'logs', 'testnet-local', `${new Date().toISOString()}.log`);
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
-  node = 'http://127.0.0.1:9944';
-  proofServer = 'http://127.0.0.1:6300';
-  constructor() {
-    setNetworkId(NetworkId.TestNet);
-  }
-}
+const logPath = (network: string): string =>
+  pathUtils.resolve(currentDir, '..', 'logs', network, `${new Date().toISOString()}.log`);
 
+/** Local standalone node + proof server. Genesis-funded, no DUST registration needed. */
 export class StandaloneConfig implements Config {
-  logDir = pathUtils.resolve(currentDir, '..', 'logs', 'standalone', `${new Date().toISOString()}.log`);
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
+  logDir = logPath('standalone');
+  networkId = 'undeployed' as const;
+  indexer = 'http://127.0.0.1:8088/api/v4/graphql';
+  indexerWS = 'ws://127.0.0.1:8088/api/v4/graphql/ws';
   node = 'http://127.0.0.1:9944';
   proofServer = 'http://127.0.0.1:6300';
   constructor() {
-    setNetworkId(NetworkId.Undeployed);
+    setNetworkId(this.networkId);
   }
 }
 
-export class TestnetRemoteConfig implements Config {
-  logDir = pathUtils.resolve(currentDir, '..', 'logs', 'testnet-remote', `${new Date().toISOString()}.log`);
-  indexer = 'https://indexer.testnet-02.midnight.network/api/v1/graphql';
-  indexerWS = 'wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws';
-  node = 'https://rpc.testnet-02.midnight.network';
+/** Preprod: stable shared testnet, the right default for most development. */
+export class PreprodConfig implements Config {
+  logDir = logPath('preprod');
+  networkId = 'preprod' as const;
+  indexer = 'https://indexer.preprod.midnight.network/api/v4/graphql';
+  indexerWS = 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws';
+  node = 'https://rpc.preprod.midnight.network';
   proofServer = 'http://127.0.0.1:6300';
+  faucetUrl = 'https://midnight-tmnight-preprod.nethermind.dev/';
   constructor() {
-    setNetworkId(NetworkId.TestNet);
+    setNetworkId(this.networkId);
+  }
+}
+
+/** Preview: receives new features ahead of preprod. */
+export class PreviewConfig implements Config {
+  logDir = logPath('preview');
+  networkId = 'preview' as const;
+  indexer = 'https://indexer.preview.midnight.network/api/v4/graphql';
+  indexerWS = 'wss://indexer.preview.midnight.network/api/v4/graphql/ws';
+  node = 'https://rpc.preview.midnight.network';
+  proofServer = 'http://127.0.0.1:6300';
+  faucetUrl = 'https://midnight-tmnight-preview.nethermind.dev/';
+  constructor() {
+    setNetworkId(this.networkId);
   }
 }
 
 // Browser-compatible configuration interface
 export interface BrowserConfig {
+  readonly networkId: MidnightNetwork;
   readonly indexer: string;
   readonly indexerWS: string;
   readonly proofServer: string;
-  readonly networkId: NetworkId;
   readonly loggingLevel: string;
 }
 
-// Browser-compatible configuration classes
-export class BrowserTestnetLocalConfig implements BrowserConfig {
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
-  proofServer = 'http://127.0.0.1:6300';
-  networkId = NetworkId.TestNet;
-  loggingLevel = 'info';
-  constructor() {
-    setNetworkId(NetworkId.TestNet);
-  }
-}
-
 export class BrowserStandaloneConfig implements BrowserConfig {
-  indexer = 'http://127.0.0.1:8088/api/v1/graphql';
-  indexerWS = 'ws://127.0.0.1:8088/api/v1/graphql/ws';
+  networkId = 'undeployed' as const;
+  indexer = 'http://127.0.0.1:8088/api/v4/graphql';
+  indexerWS = 'ws://127.0.0.1:8088/api/v4/graphql/ws';
   proofServer = 'http://127.0.0.1:6300';
-  networkId = NetworkId.Undeployed;
   loggingLevel = 'info';
   constructor() {
-    setNetworkId(NetworkId.Undeployed);
+    setNetworkId(this.networkId);
   }
 }
 
-export class BrowserTestnetRemoteConfig implements BrowserConfig {
-  indexer = 'https://indexer.testnet-02.midnight.network/api/v1/graphql';
-  indexerWS = 'wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws';
+export class BrowserPreprodConfig implements BrowserConfig {
+  networkId = 'preprod' as const;
+  indexer = 'https://indexer.preprod.midnight.network/api/v4/graphql';
+  indexerWS = 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws';
   proofServer = 'http://127.0.0.1:6300';
-  networkId = NetworkId.TestNet;
-  loggingLevel = 'trace';
+  loggingLevel = 'info';
   constructor() {
-    setNetworkId(NetworkId.TestNet);
+    setNetworkId(this.networkId);
   }
 }
 
-// Configuration factory for browser environments
-export type ConfigEnvironment = 'standalone' | 'testnet-local' | 'testnet-remote';
+export class BrowserPreviewConfig implements BrowserConfig {
+  networkId = 'preview' as const;
+  indexer = 'https://indexer.preview.midnight.network/api/v4/graphql';
+  indexerWS = 'wss://indexer.preview.midnight.network/api/v4/graphql/ws';
+  proofServer = 'http://127.0.0.1:6300';
+  loggingLevel = 'info';
+  constructor() {
+    setNetworkId(this.networkId);
+  }
+}
 
-export function createBrowserConfig(environment: ConfigEnvironment = 'testnet-remote'): BrowserConfig {
+export type ConfigEnvironment = 'standalone' | 'preprod' | 'preview';
+
+export function createBrowserConfig(environment: ConfigEnvironment = 'preprod'): BrowserConfig {
   switch (environment) {
     case 'standalone':
       return new BrowserStandaloneConfig();
-    case 'testnet-local':
-      return new BrowserTestnetLocalConfig();
-    case 'testnet-remote':
-      return new BrowserTestnetRemoteConfig();
+    case 'preprod':
+      return new BrowserPreprodConfig();
+    case 'preview':
+      return new BrowserPreviewConfig();
     default:
       throw new Error(`Unknown environment: ${environment}`);
   }
 }
 
-// Default browser configuration (mirrors current config.json values)
 export function getDefaultBrowserConfig(): BrowserConfig {
-  return createBrowserConfig('testnet-remote');
+  return createBrowserConfig('preprod');
 }

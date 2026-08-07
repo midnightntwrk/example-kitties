@@ -24,12 +24,13 @@
  */
 
 import { Kitties, type KittiesPrivateState, type Gender, type Offer } from '@midnight-ntwrk/kitties-contract';
-import type { ImpureCircuitId, MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
+import type { MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import type { DeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
 
 export type KittiesContract = Kitties.Contract<KittiesPrivateState>;
 
-export type ImpureKittiesCircuits = ImpureCircuitId<Kitties.Contract<KittiesPrivateState>>;
+// The keys of the circuits exported from the Kitties contract.
+export type ImpureKittiesCircuits = Exclude<keyof KittiesContract['impureCircuits'], number | symbol>;
 
 export const KittiesPrivateStateId = 'kittiesPrivateState';
 

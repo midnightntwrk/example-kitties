@@ -5,7 +5,7 @@ This directory contains the Compact smart contract implementation for the Crypto
 ## Contract Overview
 
 The [`kitties.compact`](src/kitties.compact) contract demonstrates:
-- Integration with external NFT modules from [`midnight-contracts`](https://github.com/riusricardo/midnight-contracts)
+- Integration with external NFT modules from [`example-nft-contracts`](https://github.com/midnightntwrk/example-nft-contracts)
 - CryptoKitties-specific breeding and marketplace functionality
 - Complex data structures and state management in Compact
 
@@ -27,20 +27,17 @@ src/
 ## Building the Contract
 
 ### Prerequisites
-- Node.js v18+
+- Node.js v22+
 - Yarn package manager
-- Compact compiler (`compactc`)
+- Compact compiler (`compact`)
 
 ### Compilation
 ```bash
-# Compile the contract (skips ZK key generation for development)
+# Compile the contract and generate its ZK keys
 yarn compact
-
-# With ZK key generation (for production)
-yarn compact --zk
 ```
 
-The compiler outputs generated code to `src/managed/kitties/contract/`.
+The compiler outputs generated code to `src/managed/kitties/contract/`, along with the proving and verifier keys under `src/managed/kitties/keys` and the circuit IR under `src/managed/kitties/zkir`.
 
 ### Testing
 ```bash
@@ -58,7 +55,7 @@ yarn test --coverage
 The contract imports standard NFT functionality:
 
 ```compact
-import "midnight-contracts/contracts/tokens/nft/src/modules/Nft";
+import "@midnight-ntwrk/example-nft-contracts/contracts/nft/src/modules/Nft";
 
 // Export standard NFT operations
 export {
@@ -200,12 +197,12 @@ yarn test-api
 ## Deployment Considerations
 
 ### Local Development
-- Uses `--skip-zk` flag for faster compilation
-- Test against local Midnight node
+- Compile with `yarn compact`, then run the contract tests against the simulator
+- Exercise the deployed contract end to end on the undeployed network (local standalone stack)
 
-### Testnet Deployment
-- Generate full ZK circuits with `yarn compact --zk`
-- Test thoroughly before mainnet
+### Shared Networks
+- Test thoroughly on preprod, the recommended shared network, before targeting preview
+- The same compiled output (contract, keys, and IR) is used across networks
 
 ## Common Issues
 
@@ -213,10 +210,10 @@ yarn test-api
 - Check Compact compiler version compatibility
 - Verify import paths
 - Set the `COMPACT_PATH` environment variable before compiling
-    - Ensure midnight-contracts dependency is available
+    - Ensure the @midnight-ntwrk/example-nft-contracts dependency is available
 
 ## Further Reading
 
 - [Compact Language Documentation](https://docs.midnight.network)
-- [midnight-contracts Repository](https://github.com/riusricardo/midnight-contracts)
+- [example-nft-contracts Repository](https://github.com/midnightntwrk/example-nft-contracts)
 - [Midnight Network Developer Guide](https://docs.midnight.network)

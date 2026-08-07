@@ -25,12 +25,9 @@
 
 import { describe, it, expect } from "vitest";
 import { KittiesSimulator } from "./kitties-simulator.js";
-import {
-  NetworkId,
-  setNetworkId
-} from "@midnight-ntwrk/midnight-js-network-id";
+import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 
-setNetworkId(NetworkId.Undeployed);
+setNetworkId("undeployed");
 
 describe("Kitties Contract Tests", () => {
   it("should create a new kitty", () => {

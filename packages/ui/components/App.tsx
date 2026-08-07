@@ -31,7 +31,7 @@ import { LocalStateProvider } from '../contexts/LocalStateProviderContext.js';
 import { RuntimeConfigurationProvider, useRuntimeConfiguration } from '../config/RuntimeConfiguration.js';
 import { MidnightWalletProvider, useMidnightWallet } from './MidnightWallet.js';
 import * as pino from 'pino';
-import { type NetworkId, setNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { type NetworkId, setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { parseCoinPublicKeyToHex } from '@midnight-ntwrk/midnight-js-utils';
 import { KittiesReaderApplication } from './KittiesReader.js';
 import { type Logger } from 'pino';
@@ -106,7 +106,7 @@ const KittiesAppContent: React.FC<{ logger: Logger }> = () => {
                 providers={kittiesProviders}
                 walletPublicKey={
                   walletState.walletAPI?.coinPublicKey
-                    ? parseCoinPublicKeyToHex(walletState.walletAPI.coinPublicKey, getZswapNetworkId())
+                    ? parseCoinPublicKeyToHex(walletState.walletAPI.coinPublicKey, getNetworkId())
                     : undefined
                 }
               />
@@ -140,7 +140,7 @@ const KittiesAppContent: React.FC<{ logger: Logger }> = () => {
         <Typography variant="body2">CoinPublicKey: {walletState.walletAPI?.coinPublicKey}</Typography>
         {walletState.walletAPI?.coinPublicKey && (
           <Typography variant="body2">
-            CoinPublicKey (hex): {parseCoinPublicKeyToHex(walletState.walletAPI.coinPublicKey, getZswapNetworkId())}
+            CoinPublicKey (hex): {parseCoinPublicKeyToHex(walletState.walletAPI.coinPublicKey, getNetworkId())}
           </Typography>
         )}
       </Paper>

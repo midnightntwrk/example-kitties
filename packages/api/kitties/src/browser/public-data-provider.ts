@@ -23,11 +23,12 @@ import type {
   ContractStateObservableConfig,
   FinalizedTxData,
   PublicDataProvider,
+  UnshieldedBalances,
 } from '@midnight-ntwrk/midnight-js-types';
 import type { Logger } from 'pino';
 import type { ContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import { retryWithBackoff } from './retry-with-backoff';
-import type { TransactionId, ZswapChainState } from '@midnight-ntwrk/ledger';
+import type { TransactionId, ZswapChainState, LedgerParameters } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 import type { Observable } from 'rxjs';
 
 export class WrappedPublicDataProvider implements PublicDataProvider {
@@ -51,7 +52,7 @@ export class WrappedPublicDataProvider implements PublicDataProvider {
   queryZSwapAndContractState(
     contractAddress: ContractAddress,
     config?: BlockHeightConfig | BlockHashConfig,
-  ): Promise<[ZswapChainState, ContractState] | null> {
+  ): Promise<[ZswapChainState, ContractState, LedgerParameters] | null> {
     return retryWithBackoff(
       () => this.wrapped.queryZSwapAndContractState(contractAddress, config),
       'queryZSwapAndContractState',
@@ -98,5 +99,31 @@ export class WrappedPublicDataProvider implements PublicDataProvider {
 
   contractStateObservable(address: ContractAddress, config: ContractStateObservableConfig): Observable<ContractState> {
     return this.wrapped.contractStateObservable(address, config);
+  }
+
+  queryUnshieldedBalances(
+    contractAddress: ContractAddress,
+    config?: BlockHeightConfig | BlockHashConfig,
+  ): Promise<UnshieldedBalances | null> {
+    return retryWithBackoff(
+      () => this.wrapped.queryUnshieldedBalances(contractAddress, config),
+      'queryUnshieldedBalances',
+      this.logger,
+    );
+  }
+
+  watchForUnshieldedBalances(contractAddress: ContractAddress): Promise<UnshieldedBalances> {
+    return retryWithBackoff(
+      () => this.wrapped.watchForUnshieldedBalances(contractAddress),
+      'watchForUnshieldedBalances',
+      this.logger,
+    );
+  }
+
+  unshieldedBalancesObservable(
+    address: ContractAddress,
+    config: ContractStateObservableConfig,
+  ): Observable<UnshieldedBalances> {
+    return this.wrapped.unshieldedBalancesObservable(address, config);
   }
 }
