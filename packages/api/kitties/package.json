@@ -55,13 +55,13 @@
   "dependencies": {
     "@midnight-ntwrk/kitties-contract": "*",
     "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf",
-    "vite-plugin-node-polyfills": "^0.23.0"
+    "vite-plugin-node-polyfills": "^0.28.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
-    "@types/node": "^22.15.29",
+    "@types/node": "^22.18.0",
     "@types/ws": "^8.18.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.2"
   }
 }
