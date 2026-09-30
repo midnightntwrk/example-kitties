@@ -6997,9 +6997,9 @@ undici-types@~7.10.0:
   integrity sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag==
 
 undici@^7.13.0:
-  version "7.15.0"
-  resolved "https://registry.npmjs.org/undici/-/undici-7.15.0.tgz"
-  integrity sha512-7oZJCPvvMvTd0OlqWsIxTuItTpJBpU1tcbVl24FMn3xt3+VSunwUasmfPJRE57oNO1KsZ4PgA1xTdAX4hq8NyQ==
+  version "7.30.0"
+  resolved "https://registry.yarnpkg.com/undici/-/undici-7.30.0.tgz#64a947266eb7e21dbeac8b99f8720feef308bbe0"
+  integrity sha512-dkrQXeHSaoamnItlYbmzG0wFYrM0ZwDxCIg0A7aKjTyyhh9svRzCNFEzV+Vm05/yehjCzjDZ31KXfGEjYSztDQ==
 
 union@~0.5.0:
   version "0.5.0"
