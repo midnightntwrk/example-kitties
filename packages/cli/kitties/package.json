@@ -11,8 +11,8 @@
     "@midnight-ntwrk/example-nft-contracts": "git+https://github.com/midnightntwrk/example-nft-contracts#f38641f13f2968fe0601c8c8dcbed4edfc56b1cf"
   },
   "devDependencies": {
-    "eslint": "^9.28.0",
-    "typescript": "^5.8.3"
+    "eslint": "^9.34.0",
+    "typescript": "^5.9.2"
   },
   "scripts": {
     "build": "rm -rf dist && tsc --project tsconfig.build.json",
