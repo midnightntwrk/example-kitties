@@ -1,3 +1,10 @@
+> [!WARNING]
+> **This repository is archived and no longer maintained.**
+>
+> `example-kitties` is no longer one of Midnight's maintained examples. Maintained examples live in [midnight-examples](https://github.com/midnightntwrk/midnight-examples), Midnight's example monorepo, where every example compiles and runs against one pinned toolchain in CI.
+>
+> For working examples, start with the [learning path](https://github.com/midnightntwrk/midnight-examples#learning-path). This repo is read-only and will not be updated for future SDK releases.
+
 # 🐱 Midnight Kitties
 
 <div align="center">
