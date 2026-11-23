@@ -60,8 +60,8 @@
   "devDependencies": {
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
-    "@types/node": "^22.15.29",
-    "@types/ws": "^8.18.1",
-    "typescript": "^5.8.3"
+    "@types/node": "22.18.0",
+    "@types/ws": "8.18.1",
+    "typescript": "5.9.2"
   }
 }

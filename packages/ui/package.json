@@ -41,10 +41,10 @@
     "@originjs/vite-plugin-commonjs": "1.0.3",
     "@repo/eslint-config": "*",
     "@repo/typescript-config": "*",
-    "@rollup/plugin-commonjs": "^28.0.1",
+    "@rollup/plugin-commonjs": "28.0.6",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.2",
-    "eslint": "^9.28.0",
-    "typescript": "^5.8.3"
+    "eslint": "9.34.0",
+    "typescript": "5.9.2"
   }
 }
